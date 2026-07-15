@@ -16,7 +16,7 @@
 | 6 | Track 파일 생성 | ✅ | dev-jay.md, dev-mush.md |
 | 7 | Commands 생성 | ✅ | ready/pr/approve/decline/merge/push-docs + promote.yml |
 | 8 | CLAUDE.md 업데이트 | ✅ | Dev 이름·인프라 값 반영 완료 |
-| 9 | 검증 | ⬜ | — |
+| 9 | 검증 | ✅ | ready-jay.command 더블클릭 → Dev 세션 정상 기동 확인 |
 
 ---
 
@@ -80,7 +80,7 @@
 - GitHub / Deploy URL 기록 완료
 - delivery-playbook.md, iteration-plan.md도 함께 갱신
 
-### 9. 검증 ⬜
-- ready-*.command 더블클릭 테스트
-- push-docs.command 테스트
-- TB API 연결 확인
+### 9. 검증 ✅
+- ready-jay.command 더블클릭 → 워크트리 생성, origin/main 리셋, Dev 세션 기동 확인
+- TB API 연결 확인 (tb_get_projects 정상 응답, Singo #100000283 확인)
+- push-docs.command·TB repo secret 등록 완료
