@@ -1,0 +1,12 @@
+# Strike Trio — track 파일은 symlink로 관리, git에서 제외
+documents/tracks/
+
+# macOS
+.DS_Store
+
+# 이 폴더에 이미 있던 무관한 별개 레포 — Singo 레포에 포함하지 않는다
+jisun-workspace/
+tracker-boot-design/
+tracker-boot-landing-design-main/
+tracker-boot/
+tracker-boot_OLD/
