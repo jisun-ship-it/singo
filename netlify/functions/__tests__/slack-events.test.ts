@@ -143,6 +143,71 @@ describe('slack-events handler — early exits (no DB/fetch)', () => {
   })
 })
 
+describe('slack-events handler — error handling', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+    vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-api-key')
+  })
+
+  it('returns 200 and logs when Claude API responds with non-ok HTTP status', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    makeSupabaseMock()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({}) } as Response)
+
+    const result = await handler(makeMessageEvent('C001'), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('slack-events handler error'),
+      expect.any(Error),
+    )
+    consoleSpy.mockRestore()
+  })
+
+  it('returns 200 and logs when Slack postMessage returns ok=false', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    makeSupabaseMock()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockResolvedValueOnce(ANTHROPIC_TRANSLATE_OK)
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: false, error: 'channel_not_found' }),
+      } as Response)
+
+    const result = await handler(makeMessageEvent('C001'), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('slack-events handler error'),
+      expect.any(Error),
+    )
+    consoleSpy.mockRestore()
+  })
+
+  it('logs DB error and skips processing when subscription query fails with unexpected error', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    makeSupabaseMock({
+      subscription: { data: null, error: { code: '42P01', message: 'relation not found' } },
+    })
+
+    const result = await handler(makeMessageEvent('C001'), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('isChannelSubscribed'),
+      expect.objectContaining({ message: 'relation not found' }),
+    )
+    consoleSpy.mockRestore()
+  })
+})
+
 describe('slack-events handler — subscribed channel routing', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn())

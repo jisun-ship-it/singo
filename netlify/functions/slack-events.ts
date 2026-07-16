@@ -29,12 +29,16 @@ async function isChannelSubscribed(
   teamId: string,
   channelId: string,
 ): Promise<boolean> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('channel_subscriptions')
     .select('subscribed')
     .eq('team_id', teamId)
     .eq('channel_id', channelId)
     .single()
+  if (error) {
+    if (error.code !== 'PGRST116') console.error('isChannelSubscribed DB error:', error)
+    return false
+  }
   return (data as { subscribed: boolean } | null)?.subscribed === true
 }
 
@@ -66,7 +70,13 @@ async function translateWithClaude(text: string, apiKey: string): Promise<string
       ],
     }),
   })
-  const data = (await response.json()) as { content: Array<{ type: string; text: string }> }
+  if (!response.ok) {
+    throw new Error(`Anthropic API error: HTTP ${response.status}`)
+  }
+  const data = (await response.json()) as { content?: Array<{ type: string; text: string }> }
+  if (!data.content) {
+    throw new Error('Anthropic API returned no content')
+  }
   return data.content.find((c) => c.type === 'text')?.text ?? text
 }
 
@@ -108,7 +118,7 @@ async function findOrCreateMirrorChannel(botToken: string, sourceName: string): 
 }
 
 async function postToSlack(botToken: string, channelId: string, text: string): Promise<void> {
-  await fetch('https://slack.com/api/chat.postMessage', {
+  const response = await fetch('https://slack.com/api/chat.postMessage', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${botToken}`,
@@ -116,6 +126,10 @@ async function postToSlack(botToken: string, channelId: string, text: string): P
     },
     body: JSON.stringify({ channel: channelId, text }),
   })
+  const data = (await response.json()) as { ok: boolean; error?: string }
+  if (!data.ok) {
+    throw new Error(`Slack postMessage error: ${data.error ?? 'unknown'}`)
+  }
 }
 
 export const handler: Handler = async (event) => {
@@ -156,10 +170,14 @@ export const handler: Handler = async (event) => {
   const subscribed = await isChannelSubscribed(supabase, connection.team_id, messageEvent.channel)
   if (!subscribed) return { statusCode: 200, body: '' }
 
-  const channelName = await getChannelName(connection.access_token, messageEvent.channel)
-  const translatedText = await translateWithClaude(messageEvent.text, anthropicApiKey)
-  const mirrorChannelId = await findOrCreateMirrorChannel(connection.access_token, channelName)
-  await postToSlack(connection.access_token, mirrorChannelId, translatedText)
+  try {
+    const channelName = await getChannelName(connection.access_token, messageEvent.channel)
+    const translatedText = await translateWithClaude(messageEvent.text, anthropicApiKey)
+    const mirrorChannelId = await findOrCreateMirrorChannel(connection.access_token, channelName)
+    await postToSlack(connection.access_token, mirrorChannelId, translatedText)
+  } catch (err) {
+    console.error('slack-events handler error:', err)
+  }
 
   return { statusCode: 200, body: '' }
 }
