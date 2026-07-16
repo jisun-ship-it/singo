@@ -28,15 +28,15 @@ async function listSlackChannels(botToken: string): Promise<SlackChannel[]> {
 async function getSubscriptionData(
   supabase: ReturnType<typeof createClient>,
   teamId: string,
-): Promise<Map<string, string | null>> {
+): Promise<Map<string, { subscribed: boolean; target_language: string | null }>> {
   const { data, error } = await supabase
     .from('channel_subscriptions')
-    .select('channel_id,target_language')
+    .select('channel_id,subscribed,target_language')
     .eq('team_id', teamId)
   if (error) console.error('getSubscribedChannelIds DB error:', error)
-  const map = new Map<string, string | null>()
-  for (const row of (data ?? []) as { channel_id: string; target_language: string | null }[]) {
-    map.set(row.channel_id, row.target_language ?? null)
+  const map = new Map<string, { subscribed: boolean; target_language: string | null }>()
+  for (const row of (data ?? []) as { channel_id: string; subscribed: boolean; target_language: string | null }[]) {
+    map.set(row.channel_id, { subscribed: row.subscribed === true, target_language: row.target_language ?? null })
   }
   return map
 }
@@ -69,12 +69,15 @@ export const handler: Handler = async (event) => {
     }
     const subscriptionMap = await getSubscriptionData(supabase, connection.team_id)
 
-    const result = channels.map((ch) => ({
-      id: ch.id,
-      name: ch.name,
-      subscribed: subscriptionMap.has(ch.id),
-      target_language: subscriptionMap.get(ch.id) ?? null,
-    }))
+    const result = channels.map((ch) => {
+      const sub = subscriptionMap.get(ch.id)
+      return {
+        id: ch.id,
+        name: ch.name,
+        subscribed: sub?.subscribed === true,
+        target_language: sub?.target_language ?? null,
+      }
+    })
 
     return {
       statusCode: 200,

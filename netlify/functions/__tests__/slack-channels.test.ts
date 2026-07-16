@@ -23,7 +23,7 @@ function makeEvent(method: string, body?: object): HandlerEvent {
 
 function makeSupabaseMock({
   connection = { data: { access_token: 'xoxb-test', team_id: 'T123' }, error: null },
-  subscriptions = { data: [{ channel_id: 'C001', target_language: null }], error: null },
+  subscriptions = { data: [{ channel_id: 'C001', subscribed: true, target_language: null }], error: null },
   upsertResult = { error: null },
 }: {
   connection?: object
@@ -110,6 +110,21 @@ describe('slack-channels handler — GET', () => {
     const result = await handler(makeEvent('GET'), {} as never, vi.fn())
 
     expect(result?.statusCode).toBe(500)
+  })
+
+  it('returns subscribed=false for channel with subscribed=false row in DB', async () => {
+    makeSupabaseMock({
+      subscriptions: { data: [{ channel_id: 'C001', subscribed: false, target_language: null }], error: null },
+    })
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, channels: [{ id: 'C001', name: 'client-jp' }] }),
+    } as Response)
+
+    const result = await handler(makeEvent('GET'), {} as never, vi.fn())
+    const body = JSON.parse(result?.body ?? '[]') as Array<{ subscribed: boolean }>
+
+    expect(body[0].subscribed).toBe(false)
   })
 
   it('returns channels with subscription status', async () => {
