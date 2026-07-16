@@ -32,6 +32,7 @@ async function listSlackChannels(botToken: string): Promise<SlackChannel[]> {
     headers: { Authorization: `Bearer ${botToken}` },
   })
   const data: SlackChannelsResponse = (await response.json()) as SlackChannelsResponse
+  if (!data.ok) throw new Error(`Slack API error: ${data.error ?? 'unknown'}`)
   return data.channels ?? []
 }
 
@@ -61,10 +62,18 @@ export const handler: Handler = async (event) => {
       }
     }
 
-    const [channels, subscribedIds] = await Promise.all([
-      listSlackChannels(connection.access_token),
-      getSubscribedChannelIds(supabase, connection.team_id),
-    ])
+    let channels: SlackChannel[]
+    try {
+      channels = await listSlackChannels(connection.access_token)
+    } catch (err) {
+      console.error('Failed to list Slack channels:', err)
+      return {
+        statusCode: 500,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: (err as Error).message }),
+      }
+    }
+    const subscribedIds = await getSubscribedChannelIds(supabase, connection.team_id)
 
     const result = channels.map((ch) => ({
       id: ch.id,

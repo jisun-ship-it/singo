@@ -84,6 +84,14 @@ describe('Settings — channel subscriptions', () => {
     expect(subscriptions.setSubscription).toHaveBeenCalledWith('C002', false)
   })
 
+  it('shows error message when channel fetch fails', async () => {
+    vi.mocked(subscriptions.fetchChannels).mockRejectedValue(new Error('Network error'))
+    render(<Settings />)
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('채널 목록을 불러오지 못했습니다'),
+    )
+  })
+
   it('does not show Channel Subscriptions section when not connected', () => {
     Object.defineProperty(window, 'location', {
       value: { origin: 'https://test.example.com', search: '' },

@@ -15,10 +15,16 @@ export function Settings() {
   })
 
   const [channels, setChannels] = useState<Channel[]>([])
+  const [channelsError, setChannelsError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!connected) return
-    fetchChannels().then(setChannels).catch(() => {})
+    fetchChannels()
+      .then(setChannels)
+      .catch((err: unknown) => {
+        console.error('Failed to load channels:', err)
+        setChannelsError('채널 목록을 불러오지 못했습니다')
+      })
   }, [connected])
 
   async function handleToggle(channel: Channel) {
@@ -41,6 +47,7 @@ export function Settings() {
       {connected && (
         <section>
           <h2>Channel Subscriptions</h2>
+          {channelsError && <p role="alert">{channelsError}</p>}
           <ul>
             {channels.map((channel) => (
               <li key={channel.id}>

@@ -67,6 +67,18 @@ describe('slack-channels handler — GET', () => {
     expect(result?.statusCode).toBe(401)
   })
 
+  it('returns 500 when Slack API returns ok=false', async () => {
+    makeSupabaseMock()
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: false, error: 'missing_scope' }),
+    } as Response)
+
+    const result = await handler(makeEvent('GET'), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(500)
+  })
+
   it('returns channels with subscription status', async () => {
     makeSupabaseMock()
     vi.mocked(fetch).mockResolvedValue({
