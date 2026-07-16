@@ -1,21 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Settings } from './Settings'
 import * as subscriptions from '../lib/subscriptions'
 
 vi.mock('../lib/subscriptions')
 
-const LANGUAGE_OPTIONS = [
-  { value: 'English', label: 'English' },
-  { value: 'Korean', label: '한국어' },
-  { value: 'Japanese', label: '日本語' },
-]
-
+const mockWorkspace = { name: 'Test Workspace', teamId: 'T123' }
 const mockChannels = [
   { id: 'C001', name: 'client-jp', subscribed: false, target_language: null, is_private: false },
   { id: 'C002', name: 'general', subscribed: true, target_language: null, is_private: true },
 ]
+const mockResponse = { workspace: mockWorkspace, channels: mockChannels }
 
 describe('Settings — Slack integration', () => {
   beforeEach(() => {
@@ -23,7 +19,9 @@ describe('Settings — Slack integration', () => {
       value: { origin: 'https://test.example.com', search: '' },
       writable: true,
     })
-    vi.mocked(subscriptions.fetchChannels).mockResolvedValue([])
+    vi.mocked(subscriptions.fetchChannels).mockResolvedValue(
+      { workspace: mockWorkspace, channels: [] },
+    )
   })
 
   it('renders a "Connect Slack" link', () => {
@@ -48,13 +46,35 @@ describe('Settings — Slack integration', () => {
   })
 })
 
+describe('Settings — header', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'location', {
+      value: { origin: 'https://test.example.com', search: '?connected=true' },
+      writable: true,
+    })
+    vi.mocked(subscriptions.fetchChannels).mockResolvedValue(mockResponse)
+  })
+
+  it('renders Singo wordmark in header', () => {
+    render(<Settings />)
+    expect(within(screen.getByRole('banner')).getByText('Singo')).toBeInTheDocument()
+  })
+
+  it('shows workspace name in header after channels load', async () => {
+    render(<Settings />)
+    await waitFor(() =>
+      expect(within(screen.getByRole('banner')).getByText('Test Workspace')).toBeInTheDocument(),
+    )
+  })
+})
+
 describe('Settings — channel subscriptions', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'location', {
       value: { origin: 'https://test.example.com', search: '?connected=true' },
       writable: true,
     })
-    vi.mocked(subscriptions.fetchChannels).mockResolvedValue(mockChannels)
+    vi.mocked(subscriptions.fetchChannels).mockResolvedValue(mockResponse)
     vi.mocked(subscriptions.setSubscription).mockResolvedValue(undefined)
   })
 
@@ -108,13 +128,13 @@ describe('Settings — channel subscriptions', () => {
     )
   })
 
-  it('does not show Channel Subscriptions section when not connected', () => {
+  it('does not show Your channels section when not connected', () => {
     Object.defineProperty(window, 'location', {
       value: { origin: 'https://test.example.com', search: '' },
       writable: true,
     })
     render(<Settings />)
-    expect(screen.queryByRole('heading', { name: 'Channel Subscriptions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Your channels' })).not.toBeInTheDocument()
   })
 })
 
@@ -124,34 +144,37 @@ describe('Settings — language selection', () => {
       value: { origin: 'https://test.example.com', search: '?connected=true' },
       writable: true,
     })
-    vi.mocked(subscriptions.fetchChannels).mockResolvedValue([
-      { id: 'C001', name: 'client-jp', subscribed: true, target_language: null, is_private: false },
-      { id: 'C002', name: 'general', subscribed: false, target_language: null, is_private: false },
-    ])
+    vi.mocked(subscriptions.fetchChannels).mockResolvedValue({
+      workspace: mockWorkspace,
+      channels: [
+        { id: 'C001', name: 'client-jp', subscribed: true, target_language: null, is_private: false },
+        { id: 'C002', name: 'general', subscribed: false, target_language: null, is_private: false },
+      ],
+    })
     vi.mocked(subscriptions.setLanguage).mockResolvedValue(undefined)
   })
 
-  it('shows language dropdown only for subscribed channels', async () => {
+  it('shows language dropdown button only for subscribed channels', async () => {
     render(<Settings />)
     await waitFor(() => screen.getByText('#client-jp'))
-    const dropdowns = screen.getAllByRole('combobox')
-    expect(dropdowns).toHaveLength(1)
+    const langBtns = screen.getAllByRole('button', { name: /English|한국어|日本語/i })
+    expect(langBtns).toHaveLength(1)
   })
 
-  it('language dropdown has correct options', async () => {
-    render(<Settings />)
-    await waitFor(() => screen.getByRole('combobox'))
-    const dropdown = screen.getByRole('combobox')
-    for (const { label } of LANGUAGE_OPTIONS) {
-      expect(dropdown).toContainElement(screen.getByRole('option', { name: label }))
-    }
-  })
-
-  it('calls setLanguage when language selection changes', async () => {
+  it('clicking language button opens option list', async () => {
     const user = userEvent.setup()
     render(<Settings />)
-    await waitFor(() => screen.getByRole('combobox'))
-    await user.selectOptions(screen.getByRole('combobox'), 'Korean')
+    await waitFor(() => screen.getByText('#client-jp'))
+    await user.click(screen.getByRole('button', { name: /English/i }))
+    expect(screen.getByRole('option', { name: '한국어' })).toBeInTheDocument()
+  })
+
+  it('calls setLanguage when option is selected', async () => {
+    const user = userEvent.setup()
+    render(<Settings />)
+    await waitFor(() => screen.getByText('#client-jp'))
+    await user.click(screen.getByRole('button', { name: /English/i }))
+    await user.click(screen.getByRole('option', { name: '한국어' }))
     expect(subscriptions.setLanguage).toHaveBeenCalledWith('C001', 'Korean')
   })
 })

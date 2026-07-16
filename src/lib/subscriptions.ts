@@ -6,10 +6,20 @@ export interface Channel {
   is_private: boolean
 }
 
-export async function fetchChannels(): Promise<Channel[]> {
+export interface WorkspaceInfo {
+  name: string
+  teamId: string
+}
+
+export interface ChannelsResponse {
+  workspace: WorkspaceInfo
+  channels: Channel[]
+}
+
+export async function fetchChannels(): Promise<ChannelsResponse> {
   const response = await fetch('/.netlify/functions/slack-channels')
   if (!response.ok) throw new Error('Failed to fetch channels')
-  return response.json() as Promise<Channel[]>
+  return response.json() as Promise<ChannelsResponse>
 }
 
 export async function setSubscription(channelId: string, subscribed: boolean): Promise<void> {

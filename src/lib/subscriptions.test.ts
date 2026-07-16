@@ -5,16 +5,19 @@ describe('fetchChannels', () => {
   beforeEach(() => vi.stubGlobal('fetch', vi.fn()))
   afterEach(() => vi.unstubAllGlobals())
 
-  it('returns channels from the API', async () => {
-    const mockChannels = [{ id: 'C001', name: 'client-jp', subscribed: false }]
+  it('returns workspace and channels from the API', async () => {
+    const mockData = {
+      workspace: { name: 'Test WS', teamId: 'T123' },
+      channels: [{ id: 'C001', name: 'client-jp', subscribed: false, target_language: null, is_private: false }],
+    }
     vi.mocked(fetch).mockResolvedValue({
       ok: true,
-      json: async () => mockChannels,
+      json: async () => mockData,
     } as Response)
 
     const result = await fetchChannels()
 
-    expect(result).toEqual(mockChannels)
+    expect(result).toEqual(mockData)
   })
 
   it('throws when the API responds with an error status', async () => {

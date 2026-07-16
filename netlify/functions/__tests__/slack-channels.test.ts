@@ -22,7 +22,7 @@ function makeEvent(method: string, body?: object): HandlerEvent {
 }
 
 function makeSupabaseMock({
-  connection = { data: { access_token: 'xoxb-test', team_id: 'T123' }, error: null },
+  connection = { data: { access_token: 'xoxb-test', team_id: 'T123', team_name: 'Test Team' }, error: null },
   subscriptions = { data: [{ channel_id: 'C001', subscribed: true, target_language: null }], error: null },
   upsertResult = { error: null },
 }: {
@@ -132,35 +132,36 @@ describe('slack-channels handler — GET', () => {
     })
     vi.mocked(fetch).mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true, channels: [{ id: 'C001', name: 'client-jp' }] }),
+      json: async () => ({ ok: true, channels: [{ id: 'C001', name: 'client-jp', is_private: false }] }),
     } as Response)
 
     const result = await handler(makeEvent('GET'), {} as never, vi.fn())
-    const body = JSON.parse(result?.body ?? '[]') as Array<{ subscribed: boolean }>
+    const body = JSON.parse(result?.body ?? '{}') as { channels: Array<{ subscribed: boolean }> }
 
-    expect(body[0].subscribed).toBe(false)
+    expect(body.channels[0].subscribed).toBe(false)
   })
 
-  it('returns channels with subscription status', async () => {
+  it('returns workspace info and channels with subscription status', async () => {
     makeSupabaseMock()
     vi.mocked(fetch).mockResolvedValue({
       ok: true,
       json: async () => ({
         ok: true,
         channels: [
-          { id: 'C001', name: 'client-jp' },
-          { id: 'C002', name: 'general' },
+          { id: 'C001', name: 'client-jp', is_private: false },
+          { id: 'C002', name: 'general', is_private: false },
         ],
       }),
     } as Response)
 
     const result = await handler(makeEvent('GET'), {} as never, vi.fn())
-    const body = JSON.parse(result?.body ?? '[]')
+    const body = JSON.parse(result?.body ?? '{}')
 
     expect(result?.statusCode).toBe(200)
-    expect(body).toEqual([
-      { id: 'C001', name: 'client-jp', subscribed: true, target_language: null },
-      { id: 'C002', name: 'general', subscribed: false, target_language: null },
+    expect(body.workspace).toEqual({ name: 'Test Team', teamId: 'T123' })
+    expect(body.channels).toEqual([
+      { id: 'C001', name: 'client-jp', is_private: false, subscribed: true, target_language: null },
+      { id: 'C002', name: 'general', is_private: false, subscribed: false, target_language: null },
     ])
   })
 })

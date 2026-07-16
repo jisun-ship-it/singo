@@ -84,7 +84,10 @@ export const handler: Handler = async (event) => {
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(result),
+      body: JSON.stringify({
+        workspace: { name: connection.team_name, teamId: connection.team_id },
+        channels: result,
+      }),
     }
   }
 
