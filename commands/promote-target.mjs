@@ -35,15 +35,16 @@ if (isMain) {
   let log = ''
   try {
     log = execFileSync('git', ['-C', repoDir, 'log', 'origin/production..origin/main', '--pretty=format:%H|%cI|%s'], { encoding: 'utf8' })
-  } catch { process.exit(0) }
+  } catch (e) { console.error('[promote-target] git log 실패:', e.message); process.exit(0) }
   const merges = log.split('\n').filter(Boolean).map((line) => {
     const [sha, ts, ...rest] = line.split('|')
     return { sha, ts, story: storyFromSubject(rest.join('|')) }
   })
   const storyIds = [...new Set(merges.map((m) => m.story).filter(Boolean))]
-  if (storyIds.length === 0) process.exit(0)
+  console.error('[promote-target] 추출된 story IDs:', storyIds)
+  if (storyIds.length === 0) { console.error('[promote-target] 스토리 태그가 붙은 커밋이 없음 — 종료'); process.exit(0) }
   const apiKey = readEnvKey(envFile, 'TRACKER_BOOT_API_KEY') || process.env.TRACKER_BOOT_API_KEY
-  if (!apiKey) process.exit(0)
+  if (!apiKey) { console.error('[promote-target] TRACKER_BOOT_API_KEY 없음 — 종료'); process.exit(0) }
   let accepted = new Set()
   try {
     const res = await fetch(GRAPHQL_URL, {
@@ -51,9 +52,17 @@ if (isMain) {
       headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
       body: JSON.stringify({ query: buildStoryQuery(storyIds) }),
     })
-    if (res.ok) accepted = acceptedFromResponse(await res.json())
-    else process.exit(0)
-  } catch { process.exit(0) }
+    if (res.ok) {
+      const json = await res.json()
+      console.error('[promote-target] GraphQL 응답:', JSON.stringify(json))
+      accepted = acceptedFromResponse(json)
+    } else {
+      console.error('[promote-target] GraphQL 요청 실패:', res.status, await res.text())
+      process.exit(0)
+    }
+  } catch (e) { console.error('[promote-target] GraphQL 호출 예외:', e.message); process.exit(0) }
+  console.error('[promote-target] accepted set:', [...accepted])
   const tip = productionTargetSha(merges, accepted)
+  console.error('[promote-target] 계산된 tip:', tip)
   if (tip) process.stdout.write(tip)
 }
