@@ -14,7 +14,7 @@ export function productionTargetSha(mergeCommits, acceptedStoryIds) {
   }
   return tip
 }
-export function storyFromSubject(subject) { const m = (subject || '').match(/#(\d+)/); return m ? m[1] : null }
+export function storyFromSubject(subject) { const m = (subject || '').match(/#(\d{9,})/); return m ? m[1] : null }
 export function buildStoryQuery(ids) {
   return `query { ${ids.map((id, i) => `s${i}: story(storyId: "${id}") { id status } `).join(' ')} }`
 }
