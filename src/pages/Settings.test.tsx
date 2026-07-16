@@ -1,13 +1,23 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Settings } from './Settings'
+import * as subscriptions from '../lib/subscriptions'
 
-describe('Settings', () => {
+vi.mock('../lib/subscriptions')
+
+const mockChannels = [
+  { id: 'C001', name: 'client-jp', subscribed: false },
+  { id: 'C002', name: 'general', subscribed: true },
+]
+
+describe('Settings — Slack integration', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'location', {
       value: { origin: 'https://test.example.com', search: '' },
       writable: true,
     })
+    vi.mocked(subscriptions.fetchChannels).mockResolvedValue([])
   })
 
   it('renders a "Connect Slack" link', () => {
@@ -29,5 +39,57 @@ describe('Settings', () => {
     render(<Settings />)
     expect(screen.getByText(/Slack workspace connected/i)).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Connect Slack/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('Settings — channel subscriptions', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'location', {
+      value: { origin: 'https://test.example.com', search: '?connected=true' },
+      writable: true,
+    })
+    vi.mocked(subscriptions.fetchChannels).mockResolvedValue(mockChannels)
+    vi.mocked(subscriptions.setSubscription).mockResolvedValue(undefined)
+  })
+
+  it('shows Channel Subscriptions section when connected', async () => {
+    render(<Settings />)
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Channel Subscriptions' })).toBeInTheDocument(),
+    )
+  })
+
+  it('lists channels with their subscription status', async () => {
+    render(<Settings />)
+    await waitFor(() => screen.getByText('#client-jp'))
+    expect(screen.getByText('#client-jp')).toBeInTheDocument()
+    expect(screen.getByText('#general')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Subscribe' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Unsubscribe' })).toBeInTheDocument()
+  })
+
+  it('calls setSubscription with subscribed=true when Subscribe is clicked', async () => {
+    const user = userEvent.setup()
+    render(<Settings />)
+    await waitFor(() => screen.getByRole('button', { name: 'Subscribe' }))
+    await user.click(screen.getByRole('button', { name: 'Subscribe' }))
+    expect(subscriptions.setSubscription).toHaveBeenCalledWith('C001', true)
+  })
+
+  it('calls setSubscription with subscribed=false when Unsubscribe is clicked', async () => {
+    const user = userEvent.setup()
+    render(<Settings />)
+    await waitFor(() => screen.getByRole('button', { name: 'Unsubscribe' }))
+    await user.click(screen.getByRole('button', { name: 'Unsubscribe' }))
+    expect(subscriptions.setSubscription).toHaveBeenCalledWith('C002', false)
+  })
+
+  it('does not show Channel Subscriptions section when not connected', () => {
+    Object.defineProperty(window, 'location', {
+      value: { origin: 'https://test.example.com', search: '' },
+      writable: true,
+    })
+    render(<Settings />)
+    expect(screen.queryByRole('heading', { name: 'Channel Subscriptions' })).not.toBeInTheDocument()
   })
 })
