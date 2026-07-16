@@ -17,7 +17,7 @@ interface SlackChannelsResponse {
 async function listSlackChannels(botToken: string): Promise<SlackChannel[]> {
   const url = new URL('https://slack.com/api/conversations.list')
   url.searchParams.set('exclude_archived', 'true')
-  url.searchParams.set('types', 'public_channel,private_channel')
+  url.searchParams.set('types', 'public_channel')
   const response = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${botToken}` },
   })

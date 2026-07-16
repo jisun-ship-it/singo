@@ -100,6 +100,20 @@ describe('slack-channels handler — GET', () => {
     consoleSpy.mockRestore()
   })
 
+  it('requests only public_channel type from Slack API', async () => {
+    makeSupabaseMock()
+    let capturedUrl: string | null = null
+    vi.mocked(fetch).mockImplementation(async (url) => {
+      capturedUrl = url as string
+      return { ok: true, json: async () => ({ ok: true, channels: [] }) } as Response
+    })
+
+    await handler(makeEvent('GET'), {} as never, vi.fn())
+
+    expect(capturedUrl).toContain('types=public_channel')
+    expect(capturedUrl).not.toContain('private_channel')
+  })
+
   it('returns 500 when Slack API returns ok=false', async () => {
     makeSupabaseMock()
     vi.mocked(fetch).mockResolvedValue({
