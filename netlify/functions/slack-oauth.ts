@@ -58,6 +58,7 @@ export const handler: Handler = async (event) => {
   const tokenData = await exchangeCodeForToken(code, clientId, clientSecret, redirectUri)
 
   if (!tokenData.ok) {
+    console.error('Slack token exchange failed:', tokenData.error)
     return { statusCode: 302, headers: { Location: '/settings?error=token_exchange_failed' } }
   }
 
