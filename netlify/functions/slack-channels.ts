@@ -5,6 +5,8 @@ import { getConnection } from './db'
 interface SlackChannel {
   id: string
   name: string
+  is_private: boolean
+  num_members: number
 }
 
 interface SlackChannelsResponse {
@@ -74,6 +76,8 @@ export const handler: Handler = async (event) => {
       return {
         id: ch.id,
         name: ch.name,
+        is_private: ch.is_private,
+        num_members: ch.num_members,
         subscribed: sub?.subscribed === true,
         target_language: sub?.target_language ?? null,
       }
@@ -82,7 +86,10 @@ export const handler: Handler = async (event) => {
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(result),
+      body: JSON.stringify({
+        workspace: { name: connection.team_name, teamId: connection.team_id },
+        channels: result,
+      }),
     }
   }
 
