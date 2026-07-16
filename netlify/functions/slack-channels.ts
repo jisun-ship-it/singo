@@ -105,6 +105,24 @@ export const handler: Handler = async (event) => {
       return { statusCode: 401, body: JSON.stringify({ error: 'No workspace connected' }) }
     }
 
+    if (subscribed === true) {
+      const joinResponse = await fetch('https://slack.com/api/conversations.join', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${connection.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ channel: channelId }),
+      })
+      const joinData = (await joinResponse.json()) as { ok: boolean; error?: string }
+      if (!joinData.ok && joinData.error !== 'already_in_channel') {
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: `conversations.join failed: ${joinData.error ?? 'unknown'}` }),
+        }
+      }
+    }
+
     const updateData: Record<string, unknown> = { team_id: connection.team_id, channel_id: channelId }
     if (subscribed !== undefined) updateData.subscribed = subscribed
     if (targetLanguage !== undefined) updateData.target_language = targetLanguage
