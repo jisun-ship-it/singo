@@ -30,6 +30,7 @@ function readEnvKey(envFile, key) {
 }
 const GRAPHQL_URL = process.env.TRACKER_BOOT_GRAPHQL_URL || 'https://trackerboot.com/analytics/graphql'
 const isMain = process.argv[1] && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1])
+console.error('[promote-target] isMain 판정:', isMain, '| module url:', fileURLToPath(import.meta.url), '| argv[1]:', process.argv[1])
 if (isMain) {
   const [, , repoDir = '.', envFile = ''] = process.argv
   let log = ''
