@@ -166,16 +166,24 @@ export const handler: Handler = async (event) => {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey)
   const connection = await getConnection(supabase)
-  if (!connection) return { statusCode: 200, body: '' }
+  if (!connection) {
+    console.log('[slack-events] no connection, skip')
+    return { statusCode: 200, body: '' }
+  }
 
   const subscribed = await isChannelSubscribed(supabase, connection.team_id, messageEvent.channel)
+  console.log('[slack-events] channel', messageEvent.channel, 'subscribed:', subscribed)
   if (!subscribed) return { statusCode: 200, body: '' }
 
   try {
     const channelName = await getChannelName(connection.access_token, messageEvent.channel)
+    console.log('[slack-events] channelName:', channelName)
     const translatedText = await translateWithOpenAI(messageEvent.text, openaiApiKey)
+    console.log('[slack-events] translated:', translatedText)
     const mirrorChannelId = await findOrCreateMirrorChannel(connection.access_token, channelName)
+    console.log('[slack-events] mirrorChannelId:', mirrorChannelId)
     await postToSlack(connection.access_token, mirrorChannelId, translatedText)
+    console.log('[slack-events] posted successfully')
   } catch (err) {
     console.error('slack-events handler error:', err)
   }

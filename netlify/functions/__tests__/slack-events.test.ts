@@ -208,6 +208,45 @@ describe('slack-events handler — error handling', () => {
   })
 })
 
+describe('slack-events handler — diagnostic logs', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+    vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
+    vi.stubEnv('OPENAI_API_KEY', 'test-api-key')
+  })
+
+  it('logs no connection when workspace is not connected', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    makeSupabaseMock({ connection: { data: null, error: { code: 'PGRST116', message: 'no rows' } } })
+
+    await handler(makeMessageEvent('C001'), {} as never, vi.fn())
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('no connection'))
+    consoleSpy.mockRestore()
+  })
+
+  it('logs channel and subscribed status for each incoming message', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    makeSupabaseMock()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    await handler(makeMessageEvent('C001'), {} as never, vi.fn())
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('channel'),
+      'C001',
+      expect.stringContaining('subscribed'),
+      true,
+    )
+    consoleSpy.mockRestore()
+  })
+})
+
 describe('slack-events handler — subscribed channel routing', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn())
