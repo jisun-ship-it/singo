@@ -5,6 +5,7 @@ import { getConnection } from './db'
 interface SlackChannel {
   id: string
   name: string
+  is_private: boolean
 }
 
 interface SlackChannelsResponse {
@@ -16,7 +17,7 @@ interface SlackChannelsResponse {
 async function listSlackChannels(botToken: string): Promise<SlackChannel[]> {
   const url = new URL('https://slack.com/api/conversations.list')
   url.searchParams.set('exclude_archived', 'true')
-  url.searchParams.set('types', 'public_channel')
+  url.searchParams.set('types', 'public_channel,private_channel')
   const response = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${botToken}` },
   })
@@ -74,6 +75,7 @@ export const handler: Handler = async (event) => {
       return {
         id: ch.id,
         name: ch.name,
+        is_private: ch.is_private,
         subscribed: sub?.subscribed === true,
         target_language: sub?.target_language ?? null,
       }

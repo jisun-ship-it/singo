@@ -11,6 +11,10 @@ const LANGUAGE_OPTIONS = [
 const SLACK_CLIENT_ID = import.meta.env.VITE_SLACK_CLIENT_ID ?? ''
 const SLACK_CALLBACK_PATH = '/.netlify/functions/slack-oauth'
 
+const BADGE_BASE = { fontSize: 11, fontWeight: 600, borderRadius: 999, padding: '3px 9px' }
+const PUBLIC_BADGE_STYLE = { ...BADGE_BASE, color: '#667085', background: '#F3F1ED' }
+const PRIVATE_BADGE_STYLE = { ...BADGE_BASE, color: '#a06a2e', background: '#FBF1E6' }
+
 export function Settings() {
   const params = new URLSearchParams(window.location.search)
   const connected = params.get('connected') === 'true'
@@ -57,12 +61,16 @@ export function Settings() {
       </section>
       {connected && (
         <section>
-          <h2>Channel Subscriptions</h2>
+          <h2>Your channels</h2>
+          <p>Subscribe to any channel and choose the language for its live mirror.</p>
           {channelsError && <p role="alert">{channelsError}</p>}
           <ul>
             {channels.map((channel) => (
               <li key={channel.id}>
                 <span>#{channel.name}</span>
+                <span style={channel.is_private ? PRIVATE_BADGE_STYLE : PUBLIC_BADGE_STYLE}>
+                  {channel.is_private ? 'Private' : 'Public'}
+                </span>
                 <button onClick={() => handleToggle(channel)}>
                   {channel.subscribed ? 'Unsubscribe' : 'Subscribe'}
                 </button>

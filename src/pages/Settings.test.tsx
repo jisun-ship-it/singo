@@ -13,8 +13,8 @@ const LANGUAGE_OPTIONS = [
 ]
 
 const mockChannels = [
-  { id: 'C001', name: 'client-jp', subscribed: false, target_language: null },
-  { id: 'C002', name: 'general', subscribed: true, target_language: null },
+  { id: 'C001', name: 'client-jp', subscribed: false, target_language: null, is_private: false },
+  { id: 'C002', name: 'general', subscribed: true, target_language: null, is_private: true },
 ]
 
 describe('Settings — Slack integration', () => {
@@ -58,11 +58,21 @@ describe('Settings — channel subscriptions', () => {
     vi.mocked(subscriptions.setSubscription).mockResolvedValue(undefined)
   })
 
-  it('shows Channel Subscriptions section when connected', async () => {
+  it('shows "Your channels" heading and description when connected', async () => {
     render(<Settings />)
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: 'Channel Subscriptions' })).toBeInTheDocument(),
+      expect(screen.getByRole('heading', { name: 'Your channels' })).toBeInTheDocument(),
     )
+    expect(
+      screen.getByText('Subscribe to any channel and choose the language for its live mirror.'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows Public badge for public channels and Private badge for private channels', async () => {
+    render(<Settings />)
+    await waitFor(() => screen.getByText('#client-jp'))
+    expect(screen.getByText('Public')).toBeInTheDocument()
+    expect(screen.getByText('Private')).toBeInTheDocument()
   })
 
   it('lists channels with their subscription status', async () => {
@@ -115,8 +125,8 @@ describe('Settings — language selection', () => {
       writable: true,
     })
     vi.mocked(subscriptions.fetchChannels).mockResolvedValue([
-      { id: 'C001', name: 'client-jp', subscribed: true, target_language: null },
-      { id: 'C002', name: 'general', subscribed: false, target_language: null },
+      { id: 'C001', name: 'client-jp', subscribed: true, target_language: null, is_private: false },
+      { id: 'C002', name: 'general', subscribed: false, target_language: null, is_private: false },
     ])
     vi.mocked(subscriptions.setLanguage).mockResolvedValue(undefined)
   })

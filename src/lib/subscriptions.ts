@@ -3,6 +3,7 @@ export interface Channel {
   name: string
   subscribed: boolean
   target_language: string | null
+  is_private: boolean
 }
 
 export async function fetchChannels(): Promise<Channel[]> {
