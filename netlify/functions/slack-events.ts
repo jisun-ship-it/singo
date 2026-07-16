@@ -13,6 +13,15 @@ interface SlackMessageEvent {
   bot_id?: string
 }
 
+interface SlackMessageDeletedEvent {
+  type: 'message'
+  subtype: 'message_deleted'
+  channel: string
+  ts: string
+  deleted_ts?: string
+  previous_message?: { ts: string }
+}
+
 interface SlackEventCallback {
   type: 'event_callback'
   team_id: string
@@ -145,6 +154,21 @@ async function postToSlack(
   return data.ts ?? ''
 }
 
+async function deleteFromSlack(botToken: string, channelId: string, ts: string): Promise<void> {
+  const response = await fetch('https://slack.com/api/chat.delete', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${botToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ channel: channelId, ts }),
+  })
+  const data = (await response.json()) as { ok: boolean; error?: string }
+  if (!data.ok) {
+    throw new Error(`Slack chat.delete error: ${data.error ?? 'unknown'}`)
+  }
+}
+
 async function saveMirrorMapping(
   supabase: ReturnType<typeof createClient>,
   sourceChannel: string,
@@ -158,11 +182,11 @@ async function saveMirrorMapping(
   if (error) console.error('saveMirrorMapping error:', error)
 }
 
-async function lookupMirrorTs(
+async function lookupMirrorMapping(
   supabase: ReturnType<typeof createClient>,
   sourceChannel: string,
   sourceTs: string,
-): Promise<string | null> {
+): Promise<{ mirrorChannel: string; mirrorTs: string } | null> {
   const { data, error } = await supabase
     .from('message_mirror_map')
     .select('mirror_channel, mirror_ts')
@@ -170,10 +194,12 @@ async function lookupMirrorTs(
     .eq('source_ts', sourceTs)
     .single()
   if (error) {
-    if (error.code !== 'PGRST116') console.error('lookupMirrorTs error:', error)
+    if (error.code !== 'PGRST116') console.error('lookupMirrorMapping error:', error)
     return null
   }
-  return (data as { mirror_channel: string; mirror_ts: string } | null)?.mirror_ts ?? null
+  const row = data as { mirror_channel: string; mirror_ts: string } | null
+  if (!row) return null
+  return { mirrorChannel: row.mirror_channel, mirrorTs: row.mirror_ts }
 }
 
 export const handler: Handler = async (event) => {
@@ -208,7 +234,7 @@ export const handler: Handler = async (event) => {
   if (messageEvent.bot_id) {
     return { statusCode: 200, body: '' }
   }
-  if (messageEvent.subtype) {
+  if (messageEvent.subtype && messageEvent.subtype !== 'message_deleted') {
     console.log('[slack-events] skipping subtype:', messageEvent.subtype)
     return { statusCode: 200, body: '' }
   }
@@ -221,6 +247,22 @@ export const handler: Handler = async (event) => {
   const connection = await getConnection(supabase)
   if (!connection) {
     console.log('[slack-events] no connection, skip')
+    return { statusCode: 200, body: '' }
+  }
+
+  if (messageEvent.subtype === 'message_deleted') {
+    const deletedEvent = messageEvent as unknown as SlackMessageDeletedEvent
+    const deletedTs = deletedEvent.deleted_ts ?? deletedEvent.previous_message?.ts
+    if (deletedTs) {
+      try {
+        const mapping = await lookupMirrorMapping(supabase, messageEvent.channel, deletedTs)
+        if (mapping) {
+          await deleteFromSlack(connection.access_token, mapping.mirrorChannel, mapping.mirrorTs)
+        }
+      } catch (err) {
+        console.error('slack-events delete error:', err)
+      }
+    }
     return { statusCode: 200, body: '' }
   }
 
@@ -237,8 +279,9 @@ export const handler: Handler = async (event) => {
     console.log('[slack-events] mirrorChannelId:', mirrorChannelId)
 
     if (messageEvent.thread_ts) {
-      const mirrorThreadTs = await lookupMirrorTs(supabase, messageEvent.channel, messageEvent.thread_ts)
-      await postToSlack(connection.access_token, mirrorChannelId, translatedText, mirrorThreadTs ?? undefined)
+      const mapping = await lookupMirrorMapping(supabase, messageEvent.channel, messageEvent.thread_ts)
+      const postedTs = await postToSlack(connection.access_token, mirrorChannelId, translatedText, mapping?.mirrorTs)
+      await saveMirrorMapping(supabase, messageEvent.channel, messageEvent.ts, mirrorChannelId, postedTs)
     } else {
       const mirrorTs = await postToSlack(connection.access_token, mirrorChannelId, translatedText)
       await saveMirrorMapping(supabase, messageEvent.channel, messageEvent.ts, mirrorChannelId, mirrorTs)

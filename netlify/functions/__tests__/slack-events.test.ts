@@ -116,6 +116,11 @@ const CHAT_POST_OK = {
   json: async () => ({ ok: true, ts: 'M_TS_POSTED' }),
 } as Response
 
+const CHAT_DELETE_OK = {
+  ok: true,
+  json: async () => ({ ok: true }),
+} as Response
+
 describe('slack-events handler — url_verification', () => {
   it('responds with challenge', async () => {
     const event = makeEvent({ type: 'url_verification', challenge: 'abc123' })
@@ -195,11 +200,11 @@ describe('slack-events handler — early exits (no DB/fetch)', () => {
     expect(vi.mocked(fetch)).not.toHaveBeenCalled()
   })
 
-  it('skips message_deleted events without posting', async () => {
+  it('skips message_changed events without posting', async () => {
     const event = makeEvent({
       type: 'event_callback',
       team_id: 'T123',
-      event: { type: 'message', subtype: 'message_deleted', channel: 'C001', ts: '1234567890.000001' },
+      event: { type: 'message', subtype: 'message_changed', channel: 'C001', ts: '1234567890.000001' },
     })
     const result = await handler(event, {} as never, vi.fn())
 
@@ -230,13 +235,13 @@ describe('slack-events handler — early exits (no DB/fetch)', () => {
     const event = makeEvent({
       type: 'event_callback',
       team_id: 'T123',
-      event: { type: 'message', subtype: 'message_deleted', channel: 'C001', ts: '1234567890.000001' },
+      event: { type: 'message', subtype: 'message_changed', channel: 'C001', ts: '1234567890.000001' },
     })
     await handler(event, {} as never, vi.fn())
 
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining('subtype'),
-      'message_deleted',
+      'message_changed',
     )
     consoleSpy.mockRestore()
   })
@@ -453,6 +458,33 @@ describe('slack-events handler — subscribed channel routing', () => {
       mirror_ts: 'M_TS_POSTED',
     })
   })
+
+  it('saves mirror mapping after posting thread reply', async () => {
+    const { mirrorMapChain } = makeSupabaseMock({
+      mirrorMapLookup: {
+        data: { mirror_channel: 'C_MIRROR', mirror_ts: 'M_PARENT_TS' },
+        error: null,
+      },
+    })
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    await handler(
+      makeMessageEvent('C001', 'ありがとう', undefined, '1234567890.000000'),
+      {} as never,
+      vi.fn(),
+    )
+
+    expect(mirrorMapChain.insert).toHaveBeenCalledWith({
+      source_channel: 'C001',
+      source_ts: '1234567890.000001',
+      mirror_channel: 'C_MIRROR',
+      mirror_ts: 'M_TS_POSTED',
+    })
+  })
 })
 
 describe('slack-events handler — Gherkin Scenario: 채널별 번역 언어 지정', () => {
@@ -558,5 +590,64 @@ describe('slack-events handler — Gherkin Scenario: 스레드 답글 미러링'
     const postBody = JSON.parse((postCallArgs[1] as RequestInit).body as string)
     expect(postBody.channel).toBe('C_MIRROR')
     expect(postBody.thread_ts).toBeUndefined()
+  })
+})
+
+describe('slack-events handler — Gherkin Scenario: 원본 메시지 삭제 시 미러 메시지 삭제', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+    vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
+    vi.stubEnv('OPEN_API_KEY', 'test-api-key')
+  })
+
+  it('calls chat.delete on mirror message when mapping exists', async () => {
+    makeSupabaseMock({
+      mirrorMapLookup: {
+        data: { mirror_channel: 'C_MIRROR', mirror_ts: 'M_TS_TO_DELETE' },
+        error: null,
+      },
+    })
+    vi.mocked(fetch).mockResolvedValueOnce(CHAT_DELETE_OK)
+
+    const event = makeEvent({
+      type: 'event_callback',
+      team_id: 'T123',
+      event: {
+        type: 'message',
+        subtype: 'message_deleted',
+        channel: 'C001',
+        ts: '1234567890.999999',
+        deleted_ts: '1234567890.000001',
+      },
+    })
+    const result = await handler(event, {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    const deleteCallArgs = vi.mocked(fetch).mock.calls[0]
+    expect(deleteCallArgs[0]).toBe('https://slack.com/api/chat.delete')
+    const deleteBody = JSON.parse((deleteCallArgs[1] as RequestInit).body as string)
+    expect(deleteBody.channel).toBe('C_MIRROR')
+    expect(deleteBody.ts).toBe('M_TS_TO_DELETE')
+  })
+
+  it('returns 200 without calling fetch when no mapping found for deleted message', async () => {
+    makeSupabaseMock()
+
+    const event = makeEvent({
+      type: 'event_callback',
+      team_id: 'T123',
+      event: {
+        type: 'message',
+        subtype: 'message_deleted',
+        channel: 'C001',
+        ts: '1234567890.999999',
+        deleted_ts: '1234567890.000001',
+      },
+    })
+    const result = await handler(event, {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
   })
 })
