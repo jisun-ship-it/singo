@@ -6,9 +6,15 @@ import * as subscriptions from '../lib/subscriptions'
 
 vi.mock('../lib/subscriptions')
 
+const LANGUAGE_OPTIONS = [
+  { value: 'English', label: 'English' },
+  { value: 'Korean', label: '한국어' },
+  { value: 'Japanese', label: '日本語' },
+]
+
 const mockChannels = [
-  { id: 'C001', name: 'client-jp', subscribed: false },
-  { id: 'C002', name: 'general', subscribed: true },
+  { id: 'C001', name: 'client-jp', subscribed: false, target_language: null },
+  { id: 'C002', name: 'general', subscribed: true, target_language: null },
 ]
 
 describe('Settings — Slack integration', () => {
@@ -99,5 +105,43 @@ describe('Settings — channel subscriptions', () => {
     })
     render(<Settings />)
     expect(screen.queryByRole('heading', { name: 'Channel Subscriptions' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Settings — language selection', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'location', {
+      value: { origin: 'https://test.example.com', search: '?connected=true' },
+      writable: true,
+    })
+    vi.mocked(subscriptions.fetchChannels).mockResolvedValue([
+      { id: 'C001', name: 'client-jp', subscribed: true, target_language: null },
+      { id: 'C002', name: 'general', subscribed: false, target_language: null },
+    ])
+    vi.mocked(subscriptions.setLanguage).mockResolvedValue(undefined)
+  })
+
+  it('shows language dropdown only for subscribed channels', async () => {
+    render(<Settings />)
+    await waitFor(() => screen.getByText('#client-jp'))
+    const dropdowns = screen.getAllByRole('combobox')
+    expect(dropdowns).toHaveLength(1)
+  })
+
+  it('language dropdown has correct options', async () => {
+    render(<Settings />)
+    await waitFor(() => screen.getByRole('combobox'))
+    const dropdown = screen.getByRole('combobox')
+    for (const { label } of LANGUAGE_OPTIONS) {
+      expect(dropdown).toContainElement(screen.getByRole('option', { name: label }))
+    }
+  })
+
+  it('calls setLanguage when language selection changes', async () => {
+    const user = userEvent.setup()
+    render(<Settings />)
+    await waitFor(() => screen.getByRole('combobox'))
+    await user.selectOptions(screen.getByRole('combobox'), 'Korean')
+    expect(subscriptions.setLanguage).toHaveBeenCalledWith('C001', 'Korean')
   })
 })

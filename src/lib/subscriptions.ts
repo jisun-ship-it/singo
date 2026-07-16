@@ -2,6 +2,7 @@ export interface Channel {
   id: string
   name: string
   subscribed: boolean
+  target_language: string | null
 }
 
 export async function fetchChannels(): Promise<Channel[]> {
@@ -17,4 +18,13 @@ export async function setSubscription(channelId: string, subscribed: boolean): P
     body: JSON.stringify({ channelId, subscribed }),
   })
   if (!response.ok) throw new Error('Failed to update subscription')
+}
+
+export async function setLanguage(channelId: string, language: string): Promise<void> {
+  const response = await fetch('/.netlify/functions/slack-channels', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channelId, targetLanguage: language }),
+  })
+  if (!response.ok) throw new Error('Failed to update language')
 }

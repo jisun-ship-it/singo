@@ -39,7 +39,7 @@ function makeMessageEvent(channelId: string, text = 'こんにちは', botId?: s
 
 function makeSupabaseMock({
   connection = { data: { access_token: 'xoxb-test', team_id: 'T123' }, error: null },
-  subscription = { data: { subscribed: true }, error: null },
+  subscription = { data: { subscribed: true, target_language: null }, error: null },
   mirrorMapLookup = { data: null, error: { code: 'PGRST116', message: 'no rows' } },
   mirrorMapInsert = { data: null, error: null },
 }: {
@@ -123,6 +123,41 @@ describe('slack-events handler — url_verification', () => {
 
     expect(result?.statusCode).toBe(200)
     expect(JSON.parse(result?.body ?? '{}')).toEqual({ challenge: 'abc123' })
+  })
+})
+
+describe('slack-events handler — Slack retry deduplication', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+    vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
+    vi.stubEnv('OPEN_API_KEY', 'test-api-key')
+  })
+
+  it('skips retry events and returns 200 without any processing', async () => {
+    const event = {
+      ...makeMessageEvent('C001'),
+      headers: { 'x-slack-retry-num': '1' },
+    }
+    const result = await handler(event as HandlerEvent, {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+
+  it('logs retry number when skipping retry event', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const event = {
+      ...makeMessageEvent('C001'),
+      headers: { 'x-slack-retry-num': '2' },
+    }
+    await handler(event as HandlerEvent, {} as never, vi.fn())
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('retry'),
+      expect.stringContaining('2'),
+    )
+    consoleSpy.mockRestore()
   })
 })
 
@@ -417,6 +452,53 @@ describe('slack-events handler — subscribed channel routing', () => {
       mirror_channel: 'C_MIRROR',
       mirror_ts: 'M_TS_POSTED',
     })
+  })
+})
+
+describe('slack-events handler — Gherkin Scenario: 채널별 번역 언어 지정', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+    vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
+    vi.stubEnv('OPEN_API_KEY', 'test-api-key')
+  })
+
+  it('uses channel target_language in OpenAI prompt when set', async () => {
+    makeSupabaseMock({
+      subscription: { data: { subscribed: true, target_language: 'Korean' }, error: null },
+    })
+    let capturedBody: { messages: Array<{ content: string }> } | null = null
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockImplementationOnce(async (_url, init) => {
+        capturedBody = JSON.parse(init?.body as string) as { messages: Array<{ content: string }> }
+        return OPENAI_TRANSLATE_OK as Response
+      })
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    await handler(makeMessageEvent('C001', 'こんにちは'), {} as never, vi.fn())
+
+    expect(capturedBody?.messages[0].content).toContain('Korean')
+  })
+
+  it('defaults to English in OpenAI prompt when target_language is null', async () => {
+    makeSupabaseMock({
+      subscription: { data: { subscribed: true, target_language: null }, error: null },
+    })
+    let capturedBody: { messages: Array<{ content: string }> } | null = null
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockImplementationOnce(async (_url, init) => {
+        capturedBody = JSON.parse(init?.body as string) as { messages: Array<{ content: string }> }
+        return OPENAI_TRANSLATE_OK as Response
+      })
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    await handler(makeMessageEvent('C001', 'こんにちは'), {} as never, vi.fn())
+
+    expect(capturedBody?.messages[0].content).toContain('English')
   })
 })
 

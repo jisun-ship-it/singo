@@ -23,7 +23,7 @@ function makeEvent(method: string, body?: object): HandlerEvent {
 
 function makeSupabaseMock({
   connection = { data: { access_token: 'xoxb-test', team_id: 'T123' }, error: null },
-  subscriptions = { data: [{ channel_id: 'C001' }], error: null },
+  subscriptions = { data: [{ channel_id: 'C001', subscribed: true, target_language: null }], error: null },
   upsertResult = { error: null },
 }: {
   connection?: object
@@ -112,6 +112,21 @@ describe('slack-channels handler — GET', () => {
     expect(result?.statusCode).toBe(500)
   })
 
+  it('returns subscribed=false for channel with subscribed=false row in DB', async () => {
+    makeSupabaseMock({
+      subscriptions: { data: [{ channel_id: 'C001', subscribed: false, target_language: null }], error: null },
+    })
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, channels: [{ id: 'C001', name: 'client-jp' }] }),
+    } as Response)
+
+    const result = await handler(makeEvent('GET'), {} as never, vi.fn())
+    const body = JSON.parse(result?.body ?? '[]') as Array<{ subscribed: boolean }>
+
+    expect(body[0].subscribed).toBe(false)
+  })
+
   it('returns channels with subscription status', async () => {
     makeSupabaseMock()
     vi.mocked(fetch).mockResolvedValue({
@@ -130,8 +145,8 @@ describe('slack-channels handler — GET', () => {
 
     expect(result?.statusCode).toBe(200)
     expect(body).toEqual([
-      { id: 'C001', name: 'client-jp', subscribed: true },
-      { id: 'C002', name: 'general', subscribed: false },
+      { id: 'C001', name: 'client-jp', subscribed: true, target_language: null },
+      { id: 'C002', name: 'general', subscribed: false, target_language: null },
     ])
   })
 })
@@ -154,6 +169,22 @@ describe('slack-channels handler — POST', () => {
     expect(result?.statusCode).toBe(200)
     expect(mockUpsert).toHaveBeenCalledWith(
       { team_id: 'T123', channel_id: 'C002', subscribed: true },
+      { onConflict: 'team_id,channel_id' },
+    )
+  })
+
+  it('saves target_language when provided', async () => {
+    const { mockUpsert } = makeSupabaseMock()
+
+    const result = await handler(
+      makeEvent('POST', { channelId: 'C001', targetLanguage: 'Korean' }),
+      {} as never,
+      vi.fn(),
+    )
+
+    expect(result?.statusCode).toBe(200)
+    expect(mockUpsert).toHaveBeenCalledWith(
+      { team_id: 'T123', channel_id: 'C001', target_language: 'Korean' },
       { onConflict: 'team_id,channel_id' },
     )
   })

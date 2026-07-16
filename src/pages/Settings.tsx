@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react'
 import { buildSlackOAuthUrl } from '../lib/slack'
-import { fetchChannels, setSubscription, type Channel } from '../lib/subscriptions'
+import { fetchChannels, setSubscription, setLanguage, type Channel } from '../lib/subscriptions'
+
+const LANGUAGE_OPTIONS = [
+  { value: 'English', label: 'English' },
+  { value: 'Korean', label: '한국어' },
+  { value: 'Japanese', label: '日本語' },
+]
 
 const SLACK_CLIENT_ID = import.meta.env.VITE_SLACK_CLIENT_ID ?? ''
 const SLACK_CALLBACK_PATH = '/.netlify/functions/slack-oauth'
@@ -33,6 +39,11 @@ export function Settings() {
     await setSubscription(channel.id, next)
   }
 
+  async function handleLanguageChange(channel: Channel, language: string) {
+    setChannels((prev) => prev.map((c) => (c.id === channel.id ? { ...c, target_language: language } : c)))
+    await setLanguage(channel.id, language)
+  }
+
   return (
     <main>
       <h1>Settings</h1>
@@ -55,6 +66,18 @@ export function Settings() {
                 <button onClick={() => handleToggle(channel)}>
                   {channel.subscribed ? 'Unsubscribe' : 'Subscribe'}
                 </button>
+                {channel.subscribed && (
+                  <select
+                    value={channel.target_language ?? 'English'}
+                    onChange={(e) => handleLanguageChange(channel, e.target.value)}
+                  >
+                    {LANGUAGE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </li>
             ))}
           </ul>
