@@ -170,6 +170,10 @@ describe('slack-channels handler — POST', () => {
   beforeEach(() => {
     vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    } as Response))
   })
 
   it('saves channel subscription and returns 200', async () => {
@@ -186,6 +190,42 @@ describe('slack-channels handler — POST', () => {
       { team_id: 'T123', channel_id: 'C002', subscribed: true },
       { onConflict: 'team_id,channel_id' },
     )
+  })
+
+  it('calls conversations.join when subscribing to a channel', async () => {
+    makeSupabaseMock()
+
+    await handler(makeEvent('POST', { channelId: 'C002', subscribed: true }), {} as never, vi.fn())
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      'https://slack.com/api/conversations.join',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('treats already_in_channel as success and saves subscription', async () => {
+    const { mockUpsert } = makeSupabaseMock()
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: false, error: 'already_in_channel' }),
+    } as Response)
+
+    const result = await handler(makeEvent('POST', { channelId: 'C002', subscribed: true }), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(mockUpsert).toHaveBeenCalled()
+  })
+
+  it('returns 500 when conversations.join fails with unexpected error', async () => {
+    makeSupabaseMock()
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: false, error: 'channel_not_found' }),
+    } as Response)
+
+    const result = await handler(makeEvent('POST', { channelId: 'C999', subscribed: true }), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(500)
   })
 
   it('saves target_language when provided', async () => {
