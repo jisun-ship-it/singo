@@ -86,4 +86,19 @@ describe('slack-oauth handler', () => {
     expect(result?.statusCode).toBe(302)
     expect(result?.headers?.Location).toBe('/settings?error=token_exchange_failed')
   })
+
+  it('logs Slack error code when token exchange fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(fetch).mockResolvedValueOnce({
+      json: async () => ({ ok: false, error: 'invalid_client_id' }),
+    } as Response)
+
+    await handler(makeEvent({ code: 'bad-code' }), {} as never, vi.fn())
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Slack token exchange failed'),
+      'invalid_client_id',
+    )
+    consoleSpy.mockRestore()
+  })
 })
