@@ -126,6 +126,41 @@ describe('slack-events handler — url_verification', () => {
   })
 })
 
+describe('slack-events handler — Slack retry deduplication', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+    vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
+    vi.stubEnv('OPEN_API_KEY', 'test-api-key')
+  })
+
+  it('skips retry events and returns 200 without any processing', async () => {
+    const event = {
+      ...makeMessageEvent('C001'),
+      headers: { 'x-slack-retry-num': '1' },
+    }
+    const result = await handler(event as HandlerEvent, {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+
+  it('logs retry number when skipping retry event', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const event = {
+      ...makeMessageEvent('C001'),
+      headers: { 'x-slack-retry-num': '2' },
+    }
+    await handler(event as HandlerEvent, {} as never, vi.fn())
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('retry'),
+      expect.stringContaining('2'),
+    )
+    consoleSpy.mockRestore()
+  })
+})
+
 describe('slack-events handler — early exits (no DB/fetch)', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn())

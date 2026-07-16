@@ -177,6 +177,12 @@ async function lookupMirrorTs(
 }
 
 export const handler: Handler = async (event) => {
+  const retryNum = event.headers['x-slack-retry-num'] ?? event.headers['X-Slack-Retry-Num']
+  if (retryNum) {
+    console.log('[slack-events] skipping retry event, x-slack-retry-num:', retryNum)
+    return { statusCode: 200, body: '' }
+  }
+
   const body = JSON.parse(event.body ?? '{}') as SlackPayload
 
   if (body.type === 'url_verification') {
