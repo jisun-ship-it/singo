@@ -9,9 +9,9 @@ if [ -z "$PR_NUMBER" ]; then
   exit 1
 fi
 
-DECISION=$(gh pr view "$PR_NUMBER" --json reviews --jq '[.reviews[] | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")] | if length == 0 then "" else .[-1].state end')
-if [ "$DECISION" != "APPROVED" ]; then
-  echo "❌ PR #$PR_NUMBER 리뷰가 APPROVED가 아닙니다 (현재: ${DECISION:-없음})."
+LAST_COMMENT=$(gh pr view "$PR_NUMBER" --json comments --jq '(.comments // []) | if length == 0 then "" else .[-1].body end')
+if [ "$LAST_COMMENT" != "✅ PM-APPROVED" ]; then
+  echo "❌ PR #$PR_NUMBER 의 마지막 코멘트가 PM 승인이 아닙니다 (현재: ${LAST_COMMENT:-없음})."
   echo "   PM이 코드리뷰 통과 판정 후 approve-jay.command로 승인한 뒤 다시 시도하세요."
   read -n 1
   exit 1
