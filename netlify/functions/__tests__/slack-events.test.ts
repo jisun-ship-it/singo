@@ -39,7 +39,7 @@ function makeMessageEvent(channelId: string, text = 'こんにちは', botId?: s
 
 function makeSupabaseMock({
   connection = { data: { access_token: 'xoxb-test', team_id: 'T123' }, error: null },
-  subscription = { data: { subscribed: true }, error: null },
+  subscription = { data: { subscribed: true, target_language: null }, error: null },
   mirrorMapLookup = { data: null, error: { code: 'PGRST116', message: 'no rows' } },
   mirrorMapInsert = { data: null, error: null },
 }: {
@@ -417,6 +417,53 @@ describe('slack-events handler — subscribed channel routing', () => {
       mirror_channel: 'C_MIRROR',
       mirror_ts: 'M_TS_POSTED',
     })
+  })
+})
+
+describe('slack-events handler — Gherkin Scenario: 채널별 번역 언어 지정', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+    vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
+    vi.stubEnv('OPEN_API_KEY', 'test-api-key')
+  })
+
+  it('uses channel target_language in OpenAI prompt when set', async () => {
+    makeSupabaseMock({
+      subscription: { data: { subscribed: true, target_language: 'Korean' }, error: null },
+    })
+    let capturedBody: { messages: Array<{ content: string }> } | null = null
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockImplementationOnce(async (_url, init) => {
+        capturedBody = JSON.parse(init?.body as string) as { messages: Array<{ content: string }> }
+        return OPENAI_TRANSLATE_OK as Response
+      })
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    await handler(makeMessageEvent('C001', 'こんにちは'), {} as never, vi.fn())
+
+    expect(capturedBody?.messages[0].content).toContain('Korean')
+  })
+
+  it('defaults to English in OpenAI prompt when target_language is null', async () => {
+    makeSupabaseMock({
+      subscription: { data: { subscribed: true, target_language: null }, error: null },
+    })
+    let capturedBody: { messages: Array<{ content: string }> } | null = null
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockImplementationOnce(async (_url, init) => {
+        capturedBody = JSON.parse(init?.body as string) as { messages: Array<{ content: string }> }
+        return OPENAI_TRANSLATE_OK as Response
+      })
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    await handler(makeMessageEvent('C001', 'こんにちは'), {} as never, vi.fn())
+
+    expect(capturedBody?.messages[0].content).toContain('English')
   })
 })
 

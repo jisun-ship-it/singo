@@ -30,18 +30,20 @@ async function isChannelSubscribed(
   supabase: ReturnType<typeof createClient>,
   teamId: string,
   channelId: string,
-): Promise<boolean> {
+): Promise<{ subscribed: boolean; targetLanguage: string } | null> {
   const { data, error } = await supabase
     .from('channel_subscriptions')
-    .select('subscribed')
+    .select('subscribed,target_language')
     .eq('team_id', teamId)
     .eq('channel_id', channelId)
     .single()
   if (error) {
     if (error.code !== 'PGRST116') console.error('isChannelSubscribed DB error:', error)
-    return false
+    return null
   }
-  return (data as { subscribed: boolean } | null)?.subscribed === true
+  const row = data as { subscribed: boolean; target_language: string | null } | null
+  if (!row) return null
+  return { subscribed: row.subscribed === true, targetLanguage: row.target_language ?? 'English' }
 }
 
 async function getChannelName(botToken: string, channelId: string): Promise<string> {
@@ -53,7 +55,7 @@ async function getChannelName(botToken: string, channelId: string): Promise<stri
   return data.channel?.name ?? channelId
 }
 
-async function translateWithOpenAI(text: string, apiKey: string): Promise<string> {
+async function translateWithOpenAI(text: string, apiKey: string, targetLanguage: string): Promise<string> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -65,7 +67,7 @@ async function translateWithOpenAI(text: string, apiKey: string): Promise<string
       messages: [
         {
           role: 'user',
-          content: `Translate the following message to English. Return only the translated text, no explanation:\n\n${text}`,
+          content: `Translate the following message to ${targetLanguage}. Return only the translated text, no explanation:\n\n${text}`,
         },
       ],
     }),
@@ -216,14 +218,14 @@ export const handler: Handler = async (event) => {
     return { statusCode: 200, body: '' }
   }
 
-  const subscribed = await isChannelSubscribed(supabase, connection.team_id, messageEvent.channel)
-  console.log('[slack-events] channel', messageEvent.channel, 'subscribed:', subscribed)
-  if (!subscribed) return { statusCode: 200, body: '' }
+  const subscription = await isChannelSubscribed(supabase, connection.team_id, messageEvent.channel)
+  console.log('[slack-events] channel', messageEvent.channel, 'subscribed:', subscription?.subscribed ?? false)
+  if (!subscription?.subscribed) return { statusCode: 200, body: '' }
 
   try {
     const channelName = await getChannelName(connection.access_token, messageEvent.channel)
     console.log('[slack-events] channelName:', channelName)
-    const translatedText = await translateWithOpenAI(messageEvent.text, openaiApiKey)
+    const translatedText = await translateWithOpenAI(messageEvent.text, openaiApiKey, subscription.targetLanguage)
     console.log('[slack-events] translated:', translatedText)
     const mirrorChannelId = await findOrCreateMirrorChannel(connection.access_token, channelName)
     console.log('[slack-events] mirrorChannelId:', mirrorChannelId)

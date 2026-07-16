@@ -25,16 +25,20 @@ async function listSlackChannels(botToken: string): Promise<SlackChannel[]> {
   return data.channels ?? []
 }
 
-async function getSubscribedChannelIds(
+async function getSubscriptionData(
   supabase: ReturnType<typeof createClient>,
   teamId: string,
-): Promise<string[]> {
+): Promise<Map<string, string | null>> {
   const { data, error } = await supabase
     .from('channel_subscriptions')
-    .select('channel_id')
+    .select('channel_id,target_language')
     .eq('team_id', teamId)
   if (error) console.error('getSubscribedChannelIds DB error:', error)
-  return ((data ?? []) as { channel_id: string }[]).map((row) => row.channel_id)
+  const map = new Map<string, string | null>()
+  for (const row of (data ?? []) as { channel_id: string; target_language: string | null }[]) {
+    map.set(row.channel_id, row.target_language ?? null)
+  }
+  return map
 }
 
 export const handler: Handler = async (event) => {
@@ -63,12 +67,13 @@ export const handler: Handler = async (event) => {
         body: JSON.stringify({ error: (err as Error).message }),
       }
     }
-    const subscribedIds = await getSubscribedChannelIds(supabase, connection.team_id)
+    const subscriptionMap = await getSubscriptionData(supabase, connection.team_id)
 
     const result = channels.map((ch) => ({
       id: ch.id,
       name: ch.name,
-      subscribed: subscribedIds.includes(ch.id),
+      subscribed: subscriptionMap.has(ch.id),
+      target_language: subscriptionMap.get(ch.id) ?? null,
     }))
 
     return {
@@ -79,9 +84,10 @@ export const handler: Handler = async (event) => {
   }
 
   if (event.httpMethod === 'POST') {
-    const { channelId, subscribed } = JSON.parse(event.body ?? '{}') as {
+    const { channelId, subscribed, targetLanguage } = JSON.parse(event.body ?? '{}') as {
       channelId: string
-      subscribed: boolean
+      subscribed?: boolean
+      targetLanguage?: string
     }
 
     const connection = await getConnection(supabase)
@@ -89,9 +95,13 @@ export const handler: Handler = async (event) => {
       return { statusCode: 401, body: JSON.stringify({ error: 'No workspace connected' }) }
     }
 
+    const updateData: Record<string, unknown> = { team_id: connection.team_id, channel_id: channelId }
+    if (subscribed !== undefined) updateData.subscribed = subscribed
+    if (targetLanguage !== undefined) updateData.target_language = targetLanguage
+
     await supabase
       .from('channel_subscriptions')
-      .upsert({ team_id: connection.team_id, channel_id: channelId, subscribed }, { onConflict: 'team_id,channel_id' })
+      .upsert(updateData, { onConflict: 'team_id,channel_id' })
 
     return { statusCode: 200, body: '' }
   }
