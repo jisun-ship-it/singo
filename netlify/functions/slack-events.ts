@@ -9,6 +9,7 @@ interface SlackMessageEvent {
   text: string
   ts: string
   thread_ts?: string
+  subtype?: string
   bot_id?: string
 }
 
@@ -197,6 +198,10 @@ export const handler: Handler = async (event) => {
 
   const messageEvent = slackEvent as SlackMessageEvent
   if (messageEvent.bot_id) {
+    return { statusCode: 200, body: '' }
+  }
+  if (messageEvent.subtype) {
+    console.log('[slack-events] skipping subtype:', messageEvent.subtype)
     return { statusCode: 200, body: '' }
   }
 

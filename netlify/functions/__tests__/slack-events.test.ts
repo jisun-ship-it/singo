@@ -159,6 +159,52 @@ describe('slack-events handler — early exits (no DB/fetch)', () => {
     expect(result?.statusCode).toBe(200)
     expect(vi.mocked(fetch)).not.toHaveBeenCalled()
   })
+
+  it('skips message_deleted events without posting', async () => {
+    const event = makeEvent({
+      type: 'event_callback',
+      team_id: 'T123',
+      event: { type: 'message', subtype: 'message_deleted', channel: 'C001', ts: '1234567890.000001' },
+    })
+    const result = await handler(event, {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+
+  it('skips message_replied events without posting', async () => {
+    const event = makeEvent({
+      type: 'event_callback',
+      team_id: 'T123',
+      event: {
+        type: 'message',
+        subtype: 'message_replied',
+        channel: 'C001',
+        ts: '1234567890.000001',
+        text: 'original parent',
+      },
+    })
+    const result = await handler(event, {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+
+  it('logs subtype value when skipping subtype events', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const event = makeEvent({
+      type: 'event_callback',
+      team_id: 'T123',
+      event: { type: 'message', subtype: 'message_deleted', channel: 'C001', ts: '1234567890.000001' },
+    })
+    await handler(event, {} as never, vi.fn())
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('subtype'),
+      'message_deleted',
+    )
+    consoleSpy.mockRestore()
+  })
 })
 
 describe('slack-events handler — error handling', () => {
