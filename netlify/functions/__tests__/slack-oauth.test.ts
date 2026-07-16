@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { handler } from '../slack-oauth'
 import type { HandlerEvent } from '@netlify/functions'
+
+vi.mock('@supabase/supabase-js')
+
+import { createClient } from '@supabase/supabase-js'
+import { handler } from '../slack-oauth'
 
 function makeEvent(params: Record<string, string>): HandlerEvent {
   return {
@@ -17,6 +21,14 @@ function makeEvent(params: Record<string, string>): HandlerEvent {
   }
 }
 
+function makeSupabaseMock({ upsertError = null }: { upsertError?: object | null } = {}) {
+  const mockUpsert = vi.fn().mockResolvedValue({ error: upsertError })
+  vi.mocked(createClient).mockReturnValue({
+    from: vi.fn().mockReturnValue({ upsert: mockUpsert }),
+  } as ReturnType<typeof createClient>)
+  return { mockUpsert }
+}
+
 describe('slack-oauth handler', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn())
@@ -28,6 +40,7 @@ describe('slack-oauth handler', () => {
   })
 
   it('redirects to /settings?connected=true on successful OAuth', async () => {
+    makeSupabaseMock()
     vi.mocked(fetch).mockResolvedValueOnce({
       json: async () => ({
         ok: true,
@@ -37,14 +50,25 @@ describe('slack-oauth handler', () => {
       }),
     } as Response)
 
+    const result = await handler(makeEvent({ code: 'valid-code' }), {} as never, vi.fn())
+    expect(result?.statusCode).toBe(302)
+    expect(result?.headers?.Location).toBe('/settings?connected=true')
+  })
+
+  it('redirects to /settings?error=save_failed when Supabase upsert fails', async () => {
+    makeSupabaseMock({ upsertError: { message: 'DB error', code: '42P01' } })
     vi.mocked(fetch).mockResolvedValueOnce({
-      json: async () => ({}),
-      ok: true,
+      json: async () => ({
+        ok: true,
+        access_token: 'xoxb-test',
+        team: { id: 'T123', name: 'Test Workspace' },
+        bot_user_id: 'U456',
+      }),
     } as Response)
 
     const result = await handler(makeEvent({ code: 'valid-code' }), {} as never, vi.fn())
     expect(result?.statusCode).toBe(302)
-    expect(result?.headers?.Location).toBe('/settings?connected=true')
+    expect(result?.headers?.Location).toBe('/settings?error=save_failed')
   })
 
   it('redirects to /settings?error=oauth_denied when user denies', async () => {
