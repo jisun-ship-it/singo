@@ -21,7 +21,7 @@ function makeEvent(body: object): HandlerEvent {
   }
 }
 
-function makeMessageEvent(channelId: string, text = 'こんにちは', botId?: string) {
+function makeMessageEvent(channelId: string, text = 'こんにちは', botId?: string, threadTs?: string) {
   return makeEvent({
     type: 'event_callback',
     team_id: 'T123',
@@ -32,6 +32,7 @@ function makeMessageEvent(channelId: string, text = 'こんにちは', botId?: s
       text,
       ts: '1234567890.000001',
       ...(botId ? { bot_id: botId } : {}),
+      ...(threadTs ? { thread_ts: threadTs } : {}),
     },
   })
 }
@@ -39,9 +40,13 @@ function makeMessageEvent(channelId: string, text = 'こんにちは', botId?: s
 function makeSupabaseMock({
   connection = { data: { access_token: 'xoxb-test', team_id: 'T123' }, error: null },
   subscription = { data: { subscribed: true }, error: null },
+  mirrorMapLookup = { data: null, error: { code: 'PGRST116', message: 'no rows' } },
+  mirrorMapInsert = { data: null, error: null },
 }: {
   connection?: object
   subscription?: object
+  mirrorMapLookup?: object
+  mirrorMapInsert?: object
 } = {}) {
   const subscriptionChain = {
     select: vi.fn().mockReturnValue({
@@ -59,10 +64,23 @@ function makeSupabaseMock({
       }),
     }),
   }
-  const mockFrom = vi.fn().mockImplementation((table: string) =>
-    table === 'slack_connections' ? connectionChain : subscriptionChain,
-  )
+  const mirrorMapChain = {
+    select: vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue(mirrorMapLookup),
+        }),
+      }),
+    }),
+    insert: vi.fn().mockResolvedValue(mirrorMapInsert),
+  }
+  const mockFrom = vi.fn().mockImplementation((table: string) => {
+    if (table === 'slack_connections') return connectionChain
+    if (table === 'message_mirror_map') return mirrorMapChain
+    return subscriptionChain
+  })
   vi.mocked(createClient).mockReturnValue({ from: mockFrom } as ReturnType<typeof createClient>)
+  return { mockFrom, mirrorMapChain }
 }
 
 const CONVERSATIONS_INFO_OK = {
@@ -95,7 +113,7 @@ const CONVERSATIONS_LIST_WITH_MIRROR = {
 
 const CHAT_POST_OK = {
   ok: true,
-  json: async () => ({ ok: true }),
+  json: async () => ({ ok: true, ts: 'M_TS_POSTED' }),
 } as Response
 
 describe('slack-events handler — url_verification', () => {
@@ -140,6 +158,52 @@ describe('slack-events handler — early exits (no DB/fetch)', () => {
 
     expect(result?.statusCode).toBe(200)
     expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+
+  it('skips message_deleted events without posting', async () => {
+    const event = makeEvent({
+      type: 'event_callback',
+      team_id: 'T123',
+      event: { type: 'message', subtype: 'message_deleted', channel: 'C001', ts: '1234567890.000001' },
+    })
+    const result = await handler(event, {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+
+  it('skips message_replied events without posting', async () => {
+    const event = makeEvent({
+      type: 'event_callback',
+      team_id: 'T123',
+      event: {
+        type: 'message',
+        subtype: 'message_replied',
+        channel: 'C001',
+        ts: '1234567890.000001',
+        text: 'original parent',
+      },
+    })
+    const result = await handler(event, {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+
+  it('logs subtype value when skipping subtype events', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const event = makeEvent({
+      type: 'event_callback',
+      team_id: 'T123',
+      event: { type: 'message', subtype: 'message_deleted', channel: 'C001', ts: '1234567890.000001' },
+    })
+    await handler(event, {} as never, vi.fn())
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('subtype'),
+      'message_deleted',
+    )
+    consoleSpy.mockRestore()
   })
 })
 
@@ -335,5 +399,82 @@ describe('slack-events handler — subscribed channel routing', () => {
     const postBody = JSON.parse((postCallArgs[1] as RequestInit).body as string)
     expect(postBody.channel).toBe('C_EXISTING')
     expect(postBody.text).toBe('Hello')
+  })
+
+  it('saves mirror mapping after posting parent message', async () => {
+    const { mirrorMapChain } = makeSupabaseMock()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    await handler(makeMessageEvent('C001', 'こんにちは'), {} as never, vi.fn())
+
+    expect(mirrorMapChain.insert).toHaveBeenCalledWith({
+      source_channel: 'C001',
+      source_ts: '1234567890.000001',
+      mirror_channel: 'C_MIRROR',
+      mirror_ts: 'M_TS_POSTED',
+    })
+  })
+})
+
+describe('slack-events handler — Gherkin Scenario: 스레드 답글 미러링', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+    vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
+    vi.stubEnv('OPEN_API_KEY', 'test-api-key')
+  })
+
+  it('posts thread reply to mirror thread when parent mapping exists', async () => {
+    makeSupabaseMock({
+      mirrorMapLookup: {
+        data: { mirror_channel: 'C_MIRROR', mirror_ts: 'M_PARENT_TS' },
+        error: null,
+      },
+    })
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    const result = await handler(
+      makeMessageEvent('C001', 'ありがとう', undefined, '1234567890.000000'),
+      {} as never,
+      vi.fn(),
+    )
+
+    expect(result?.statusCode).toBe(200)
+    const postCallArgs = vi.mocked(fetch).mock.calls[3]
+    const postBody = JSON.parse((postCallArgs[1] as RequestInit).body as string)
+    expect(postBody.channel).toBe('C_MIRROR')
+    expect(postBody.text).toBe('Hello')
+    expect(postBody.thread_ts).toBe('M_PARENT_TS')
+  })
+
+  it('posts thread reply without thread_ts when parent mapping is not found', async () => {
+    makeSupabaseMock({
+      mirrorMapLookup: { data: null, error: { code: 'PGRST116', message: 'no rows' } },
+    })
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    const result = await handler(
+      makeMessageEvent('C001', 'ありがとう', undefined, 'UNKNOWN.TS'),
+      {} as never,
+      vi.fn(),
+    )
+
+    expect(result?.statusCode).toBe(200)
+    const postCallArgs = vi.mocked(fetch).mock.calls[3]
+    const postBody = JSON.parse((postCallArgs[1] as RequestInit).body as string)
+    expect(postBody.channel).toBe('C_MIRROR')
+    expect(postBody.thread_ts).toBeUndefined()
   })
 })

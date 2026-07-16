@@ -8,6 +8,8 @@ interface SlackMessageEvent {
   user?: string
   text: string
   ts: string
+  thread_ts?: string
+  subtype?: string
   bot_id?: string
 }
 
@@ -118,19 +120,58 @@ async function findOrCreateMirrorChannel(botToken: string, sourceName: string): 
   throw new Error(`Failed to find or create mirror channel for ${sourceName}`)
 }
 
-async function postToSlack(botToken: string, channelId: string, text: string): Promise<void> {
+async function postToSlack(
+  botToken: string,
+  channelId: string,
+  text: string,
+  threadTs?: string,
+): Promise<string> {
+  const body: { channel: string; text: string; thread_ts?: string } = { channel: channelId, text }
+  if (threadTs) body.thread_ts = threadTs
   const response = await fetch('https://slack.com/api/chat.postMessage', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${botToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ channel: channelId, text }),
+    body: JSON.stringify(body),
   })
-  const data = (await response.json()) as { ok: boolean; error?: string }
+  const data = (await response.json()) as { ok: boolean; error?: string; ts?: string }
   if (!data.ok) {
     throw new Error(`Slack postMessage error: ${data.error ?? 'unknown'}`)
   }
+  return data.ts ?? ''
+}
+
+async function saveMirrorMapping(
+  supabase: ReturnType<typeof createClient>,
+  sourceChannel: string,
+  sourceTs: string,
+  mirrorChannel: string,
+  mirrorTs: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('message_mirror_map')
+    .insert({ source_channel: sourceChannel, source_ts: sourceTs, mirror_channel: mirrorChannel, mirror_ts: mirrorTs })
+  if (error) console.error('saveMirrorMapping error:', error)
+}
+
+async function lookupMirrorTs(
+  supabase: ReturnType<typeof createClient>,
+  sourceChannel: string,
+  sourceTs: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('message_mirror_map')
+    .select('mirror_channel, mirror_ts')
+    .eq('source_channel', sourceChannel)
+    .eq('source_ts', sourceTs)
+    .single()
+  if (error) {
+    if (error.code !== 'PGRST116') console.error('lookupMirrorTs error:', error)
+    return null
+  }
+  return (data as { mirror_channel: string; mirror_ts: string } | null)?.mirror_ts ?? null
 }
 
 export const handler: Handler = async (event) => {
@@ -159,6 +200,10 @@ export const handler: Handler = async (event) => {
   if (messageEvent.bot_id) {
     return { statusCode: 200, body: '' }
   }
+  if (messageEvent.subtype) {
+    console.log('[slack-events] skipping subtype:', messageEvent.subtype)
+    return { statusCode: 200, body: '' }
+  }
 
   const supabaseUrl = process.env.SUPABASE_URL ?? ''
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
@@ -182,7 +227,14 @@ export const handler: Handler = async (event) => {
     console.log('[slack-events] translated:', translatedText)
     const mirrorChannelId = await findOrCreateMirrorChannel(connection.access_token, channelName)
     console.log('[slack-events] mirrorChannelId:', mirrorChannelId)
-    await postToSlack(connection.access_token, mirrorChannelId, translatedText)
+
+    if (messageEvent.thread_ts) {
+      const mirrorThreadTs = await lookupMirrorTs(supabase, messageEvent.channel, messageEvent.thread_ts)
+      await postToSlack(connection.access_token, mirrorChannelId, translatedText, mirrorThreadTs ?? undefined)
+    } else {
+      const mirrorTs = await postToSlack(connection.access_token, mirrorChannelId, translatedText)
+      await saveMirrorMapping(supabase, messageEvent.channel, messageEvent.ts, mirrorChannelId, mirrorTs)
+    }
     console.log('[slack-events] posted successfully')
   } catch (err) {
     console.error('slack-events handler error:', err)
