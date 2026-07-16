@@ -87,6 +87,29 @@ describe('slack-oauth handler', () => {
     expect(result?.headers?.Location).toBe('/settings?error=token_exchange_failed')
   })
 
+  it('builds redirectUri from request host header, not env var', async () => {
+    makeSupabaseMock()
+    let capturedBody: URLSearchParams | null = null
+    vi.mocked(fetch).mockImplementationOnce(async (_url, init) => {
+      capturedBody = new URLSearchParams(init?.body as string)
+      return {
+        json: async () => ({
+          ok: true,
+          access_token: 'xoxb-test',
+          team: { id: 'T123', name: 'Test Workspace' },
+          bot_user_id: 'U456',
+        }),
+      } as Response
+    })
+
+    const event = { ...makeEvent({ code: 'valid-code' }), headers: { host: 'dev-jay--singo-lingo.netlify.app' } }
+    await handler(event, {} as never, vi.fn())
+
+    expect(capturedBody?.get('redirect_uri')).toBe(
+      'https://dev-jay--singo-lingo.netlify.app/.netlify/functions/slack-oauth',
+    )
+  })
+
   it('logs Slack error code when token exchange fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.mocked(fetch).mockResolvedValueOnce({
