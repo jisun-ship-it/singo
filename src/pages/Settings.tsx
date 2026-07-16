@@ -122,27 +122,34 @@ export function Settings() {
       </header>
 
       <main style={{ maxWidth: 720, margin: '0 auto', padding: '52px 32px 96px' }}>
-        <section>
-          <h2>Slack Integration</h2>
-          {connected ? (
-            <p>Slack workspace connected. Bot is installed in your workspace.</p>
-          ) : (
+        {!connected && (
+          <section>
+            <h2>Slack Integration</h2>
             <a href={slackAuthUrl}>Connect Slack</a>
-          )}
-        </section>
+          </section>
+        )}
 
         {connected && (
           <section>
-            <h2>Your channels</h2>
-            <p>Subscribe to any channel and choose the language for its live mirror.</p>
+            <h2 style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-.03em', margin: '0 0 8px' }}>Your channels</h2>
+            <p style={{ fontSize: 17, color: '#667085', margin: '0 0 32px' }}>Subscribe to any channel and choose the language for its live mirror.</p>
             {channelsError && <p role="alert">{channelsError}</p>}
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
               {channels.map((channel) => (
                 <li
                   key={channel.id}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0' }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 16,
+                    padding: '18px 4px',
+                    borderBottom: '1px solid #EDEAE5',
+                  }}
                 >
-                  <span style={{ fontWeight: 500 }}>#{channel.name}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 500 }}>#{channel.name}</div>
+                    <div style={{ fontSize: 13, color: '#98928a', marginTop: 2 }}>{channel.num_members} members</div>
+                  </div>
                   <span style={channel.is_private ? PRIVATE_BADGE_STYLE : PUBLIC_BADGE_STYLE}>
                     {channel.is_private ? 'Private' : 'Public'}
                   </span>

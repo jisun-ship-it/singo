@@ -8,8 +8,8 @@ vi.mock('../lib/subscriptions')
 
 const mockWorkspace = { name: 'Test Workspace', teamId: 'T123' }
 const mockChannels = [
-  { id: 'C001', name: 'client-jp', subscribed: false, target_language: null, is_private: false },
-  { id: 'C002', name: 'general', subscribed: true, target_language: null, is_private: true },
+  { id: 'C001', name: 'client-jp', subscribed: false, target_language: null, is_private: false, num_members: 5 },
+  { id: 'C002', name: 'general', subscribed: true, target_language: null, is_private: true, num_members: 42 },
 ]
 const mockResponse = { workspace: mockWorkspace, channels: mockChannels }
 
@@ -24,7 +24,7 @@ describe('Settings — Slack integration', () => {
     )
   })
 
-  it('renders a "Connect Slack" link', () => {
+  it('renders a "Connect Slack" link when not connected', () => {
     render(<Settings />)
     expect(screen.getByRole('link', { name: /Connect Slack/i })).toBeInTheDocument()
   })
@@ -35,14 +35,14 @@ describe('Settings — Slack integration', () => {
     expect(link).toHaveAttribute('href', expect.stringContaining('slack.com/oauth/v2/authorize'))
   })
 
-  it('shows connected confirmation when ?connected=true', () => {
+  it('hides Slack Integration section and Connect Slack link when connected', () => {
     Object.defineProperty(window, 'location', {
       value: { origin: 'https://test.example.com', search: '?connected=true' },
       writable: true,
     })
     render(<Settings />)
-    expect(screen.getByText(/Slack workspace connected/i)).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Connect Slack/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Slack workspace connected/i)).not.toBeInTheDocument()
   })
 })
 
@@ -93,6 +93,13 @@ describe('Settings — channel subscriptions', () => {
     await waitFor(() => screen.getByText('#client-jp'))
     expect(screen.getByText('Public')).toBeInTheDocument()
     expect(screen.getByText('Private')).toBeInTheDocument()
+  })
+
+  it('shows member count as secondary text under channel name', async () => {
+    render(<Settings />)
+    await waitFor(() => screen.getByText('#client-jp'))
+    expect(screen.getByText('5 members')).toBeInTheDocument()
+    expect(screen.getByText('42 members')).toBeInTheDocument()
   })
 
   it('lists channels with their subscription status', async () => {
@@ -147,8 +154,8 @@ describe('Settings — language selection', () => {
     vi.mocked(subscriptions.fetchChannels).mockResolvedValue({
       workspace: mockWorkspace,
       channels: [
-        { id: 'C001', name: 'client-jp', subscribed: true, target_language: null, is_private: false },
-        { id: 'C002', name: 'general', subscribed: false, target_language: null, is_private: false },
+        { id: 'C001', name: 'client-jp', subscribed: true, target_language: null, is_private: false, num_members: 3 },
+        { id: 'C002', name: 'general', subscribed: false, target_language: null, is_private: false, num_members: 10 },
       ],
     })
     vi.mocked(subscriptions.setLanguage).mockResolvedValue(undefined)

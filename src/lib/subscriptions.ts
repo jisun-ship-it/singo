@@ -4,6 +4,7 @@ export interface Channel {
   subscribed: boolean
   target_language: string | null
   is_private: boolean
+  num_members: number
 }
 
 export interface WorkspaceInfo {

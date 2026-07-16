@@ -132,7 +132,7 @@ describe('slack-channels handler — GET', () => {
     })
     vi.mocked(fetch).mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true, channels: [{ id: 'C001', name: 'client-jp', is_private: false }] }),
+      json: async () => ({ ok: true, channels: [{ id: 'C001', name: 'client-jp', is_private: false, num_members: 5 }] }),
     } as Response)
 
     const result = await handler(makeEvent('GET'), {} as never, vi.fn())
@@ -148,8 +148,8 @@ describe('slack-channels handler — GET', () => {
       json: async () => ({
         ok: true,
         channels: [
-          { id: 'C001', name: 'client-jp', is_private: false },
-          { id: 'C002', name: 'general', is_private: false },
+          { id: 'C001', name: 'client-jp', is_private: false, num_members: 5 },
+          { id: 'C002', name: 'general', is_private: false, num_members: 42 },
         ],
       }),
     } as Response)
@@ -160,8 +160,8 @@ describe('slack-channels handler — GET', () => {
     expect(result?.statusCode).toBe(200)
     expect(body.workspace).toEqual({ name: 'Test Team', teamId: 'T123' })
     expect(body.channels).toEqual([
-      { id: 'C001', name: 'client-jp', is_private: false, subscribed: true, target_language: null },
-      { id: 'C002', name: 'general', is_private: false, subscribed: false, target_language: null },
+      { id: 'C001', name: 'client-jp', is_private: false, num_members: 5, subscribed: true, target_language: null },
+      { id: 'C002', name: 'general', is_private: false, num_members: 42, subscribed: false, target_language: null },
     ])
   })
 })

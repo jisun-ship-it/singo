@@ -6,6 +6,7 @@ interface SlackChannel {
   id: string
   name: string
   is_private: boolean
+  num_members: number
 }
 
 interface SlackChannelsResponse {
@@ -76,6 +77,7 @@ export const handler: Handler = async (event) => {
         id: ch.id,
         name: ch.name,
         is_private: ch.is_private,
+        num_members: ch.num_members,
         subscribed: sub?.subscribed === true,
         target_language: sub?.target_language ?? null,
       }

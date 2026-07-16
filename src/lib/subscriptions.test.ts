@@ -8,7 +8,7 @@ describe('fetchChannels', () => {
   it('returns workspace and channels from the API', async () => {
     const mockData = {
       workspace: { name: 'Test WS', teamId: 'T123' },
-      channels: [{ id: 'C001', name: 'client-jp', subscribed: false, target_language: null, is_private: false }],
+      channels: [{ id: 'C001', name: 'client-jp', subscribed: false, target_language: null, is_private: false, num_members: 3 }],
     }
     vi.mocked(fetch).mockResolvedValue({
       ok: true,
