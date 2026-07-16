@@ -264,6 +264,26 @@ describe('slack-events handler — diagnostic logs', () => {
   })
 })
 
+describe('slack-events handler — Gherkin Scenario: 미러링 안 된 채널', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+    vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
+    vi.stubEnv('OPEN_API_KEY', 'test-api-key')
+  })
+
+  it('does not post to any channel when channel has subscribed=false (explicitly unsubscribed)', async () => {
+    makeSupabaseMock({
+      subscription: { data: { subscribed: false }, error: null },
+    })
+
+    const result = await handler(makeMessageEvent('C_UNSUBSCRIBED'), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+})
+
 describe('slack-events handler — subscribed channel routing', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn())
