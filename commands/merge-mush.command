@@ -9,7 +9,7 @@ if [ -z "$PR_NUMBER" ]; then
   exit 1
 fi
 
-DECISION=$(gh pr view "$PR_NUMBER" --json reviewDecision --jq '.reviewDecision')
+DECISION=$(gh pr view "$PR_NUMBER" --json reviews --jq '[.reviews[] | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")] | if length == 0 then "" else .[-1].state end')
 if [ "$DECISION" != "APPROVED" ]; then
   echo "❌ PR #$PR_NUMBER 리뷰가 APPROVED가 아닙니다 (현재: ${DECISION:-없음})."
   echo "   PM이 코드리뷰 통과 판정 후 approve-mush.command로 승인한 뒤 다시 시도하세요."
