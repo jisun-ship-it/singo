@@ -29,12 +29,13 @@ async function saveWorkspaceConnection(
   data: { teamId: string; teamName: string; accessToken: string; botUserId: string },
 ): Promise<void> {
   const supabase = createClient(supabaseUrl, serviceRoleKey)
-  await supabase.from('slack_connections').upsert({
+  const { error } = await supabase.from('slack_connections').upsert({
     team_id: data.teamId,
     team_name: data.teamName,
     access_token: data.accessToken,
     bot_user_id: data.botUserId,
   }, { onConflict: 'team_id' })
+  if (error) throw new Error(`Failed to save workspace: ${error.message}`)
 }
 
 export const handler: Handler = async (event) => {
@@ -60,12 +61,17 @@ export const handler: Handler = async (event) => {
     return { statusCode: 302, headers: { Location: '/settings?error=token_exchange_failed' } }
   }
 
-  await saveWorkspaceConnection(supabaseUrl, serviceRoleKey, {
-    teamId: tokenData.team!.id,
-    teamName: tokenData.team!.name,
-    accessToken: tokenData.access_token!,
-    botUserId: tokenData.bot_user_id!,
-  })
+  try {
+    await saveWorkspaceConnection(supabaseUrl, serviceRoleKey, {
+      teamId: tokenData.team!.id,
+      teamName: tokenData.team!.name,
+      accessToken: tokenData.access_token!,
+      botUserId: tokenData.bot_user_id!,
+    })
+  } catch (err) {
+    console.error('Failed to save workspace connection:', err)
+    return { statusCode: 302, headers: { Location: '/settings?error=save_failed' } }
+  }
 
   return { statusCode: 302, headers: { Location: '/settings?connected=true' } }
 }

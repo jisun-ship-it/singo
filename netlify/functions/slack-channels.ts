@@ -20,7 +20,11 @@ async function getConnection(
     .select('access_token, team_id')
     .limit(1)
     .single()
-  if (error || !data) return null
+  if (error) {
+    if (error.code !== 'PGRST116') console.error('getConnection DB error:', error)
+    return null
+  }
+  if (!data) return null
   return data as { access_token: string; team_id: string }
 }
 
@@ -40,10 +44,11 @@ async function getSubscribedChannelIds(
   supabase: ReturnType<typeof createClient>,
   teamId: string,
 ): Promise<string[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('channel_subscriptions')
     .select('channel_id')
     .eq('team_id', teamId)
+  if (error) console.error('getSubscribedChannelIds DB error:', error)
   return ((data ?? []) as { channel_id: string }[]).map((row) => row.channel_id)
 }
 

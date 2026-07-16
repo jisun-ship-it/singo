@@ -60,11 +60,44 @@ describe('slack-channels handler — GET', () => {
   })
 
   it('returns 401 when no workspace is connected', async () => {
-    makeSupabaseMock({ connection: { data: null, error: { message: 'no rows' } } })
+    makeSupabaseMock({ connection: { data: null, error: { message: 'no rows', code: 'PGRST116' } } })
 
     const result = await handler(makeEvent('GET'), {} as never, vi.fn())
 
     expect(result?.statusCode).toBe(401)
+  })
+
+  it('logs error for unexpected connection query failure (non-PGRST116)', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    makeSupabaseMock({ connection: { data: null, error: { message: 'DB down', code: '42P01' } } })
+
+    const result = await handler(makeEvent('GET'), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(401)
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('getConnection'),
+      expect.objectContaining({ message: 'DB down' }),
+    )
+    consoleSpy.mockRestore()
+  })
+
+  it('logs error when subscription query fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    makeSupabaseMock({
+      subscriptions: { data: null, error: { message: 'table error', code: '42P01' } },
+    })
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, channels: [{ id: 'C001', name: 'test' }] }),
+    } as Response)
+
+    await handler(makeEvent('GET'), {} as never, vi.fn())
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('getSubscribedChannelIds'),
+      expect.objectContaining({ message: 'table error' }),
+    )
+    consoleSpy.mockRestore()
   })
 
   it('returns 500 when Slack API returns ok=false', async () => {
