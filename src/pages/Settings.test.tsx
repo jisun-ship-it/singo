@@ -145,6 +145,32 @@ describe('Settings — channel subscriptions', () => {
   })
 })
 
+describe('Settings — channel search', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'location', {
+      value: { origin: 'https://test.example.com', search: '?connected=true' },
+      writable: true,
+    })
+    vi.mocked(subscriptions.fetchChannels).mockResolvedValue(mockResponse)
+  })
+
+  it('filters channels by search query', async () => {
+    const user = userEvent.setup()
+    render(<Settings />)
+    await waitFor(() => screen.getByText('#client-jp'))
+    await user.type(screen.getByPlaceholderText('Search channels'), 'client')
+    expect(screen.getByText('#client-jp')).toBeInTheDocument()
+    expect(screen.queryByText('#general')).not.toBeInTheDocument()
+  })
+
+  it('shows all channels when search query is empty', async () => {
+    render(<Settings />)
+    await waitFor(() => screen.getByText('#client-jp'))
+    expect(screen.getByText('#client-jp')).toBeInTheDocument()
+    expect(screen.getByText('#general')).toBeInTheDocument()
+  })
+})
+
 describe('Settings — language selection', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'location', {
