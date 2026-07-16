@@ -162,7 +162,7 @@ export const handler: Handler = async (event) => {
 
   const supabaseUrl = process.env.SUPABASE_URL ?? ''
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
-  const openaiApiKey = process.env.OPENAI_API_KEY ?? ''
+  const openaiApiKey = process.env.OPEN_API_KEY ?? ''
 
   const supabase = createClient(supabaseUrl, serviceRoleKey)
   const connection = await getConnection(supabase)

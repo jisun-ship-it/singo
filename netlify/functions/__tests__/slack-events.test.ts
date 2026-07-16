@@ -113,7 +113,7 @@ describe('slack-events handler — early exits (no DB/fetch)', () => {
     vi.stubGlobal('fetch', vi.fn())
     vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
-    vi.stubEnv('OPENAI_API_KEY', 'test-api-key')
+    vi.stubEnv('OPEN_API_KEY', 'test-api-key')
   })
 
   it('ignores unknown top-level event types', async () => {
@@ -148,7 +148,7 @@ describe('slack-events handler — error handling', () => {
     vi.stubGlobal('fetch', vi.fn())
     vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
-    vi.stubEnv('OPENAI_API_KEY', 'test-api-key')
+    vi.stubEnv('OPEN_API_KEY', 'test-api-key')
   })
 
   it('returns 200 and logs when Claude API responds with non-ok HTTP status', async () => {
@@ -213,7 +213,7 @@ describe('slack-events handler — diagnostic logs', () => {
     vi.stubGlobal('fetch', vi.fn())
     vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
-    vi.stubEnv('OPENAI_API_KEY', 'test-api-key')
+    vi.stubEnv('OPEN_API_KEY', 'test-api-key')
   })
 
   it('logs no connection when workspace is not connected', async () => {
@@ -224,6 +224,23 @@ describe('slack-events handler — diagnostic logs', () => {
 
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('no connection'))
     consoleSpy.mockRestore()
+  })
+
+  it('passes OPEN_API_KEY env var as Bearer token to OpenAI', async () => {
+    makeSupabaseMock()
+    let capturedHeaders: Record<string, string> | null = null
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockImplementationOnce(async (_url, init) => {
+        capturedHeaders = init?.headers as Record<string, string>
+        return OPENAI_TRANSLATE_OK as Response
+      })
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    await handler(makeMessageEvent('C001'), {} as never, vi.fn())
+
+    expect(capturedHeaders?.['Authorization']).toBe('Bearer test-api-key')
   })
 
   it('logs channel and subscribed status for each incoming message', async () => {
@@ -252,7 +269,7 @@ describe('slack-events handler — subscribed channel routing', () => {
     vi.stubGlobal('fetch', vi.fn())
     vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
-    vi.stubEnv('OPENAI_API_KEY', 'test-api-key')
+    vi.stubEnv('OPEN_API_KEY', 'test-api-key')
   })
 
   it('ignores message from non-subscribed channel', async () => {
