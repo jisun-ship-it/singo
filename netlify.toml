@@ -5,8 +5,8 @@
 
 [build.environment]
   VITE_SLACK_CLIENT_ID = ""
-  VITE_SUPABASE_URL = ""
-  VITE_SUPABASE_ANON_KEY = ""
+  VITE_SUPABASE_URL = "https://ibgedcmwgrrmcpmkddwj.supabase.co"
+  VITE_SUPABASE_ANON_KEY = "sb_publishable_XPgVUyimZlAt6SJDoC2RyQ_K5HLecGc"
 
 [[redirects]]
   from = "/*"
