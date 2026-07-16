@@ -1,5 +1,6 @@
 import type { Handler } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
+import { getConnection } from './db'
 
 interface SlackChannel {
   id: string
@@ -10,22 +11,6 @@ interface SlackChannelsResponse {
   ok: boolean
   channels?: SlackChannel[]
   error?: string
-}
-
-async function getConnection(
-  supabase: ReturnType<typeof createClient>,
-): Promise<{ access_token: string; team_id: string } | null> {
-  const { data, error } = await supabase
-    .from('slack_connections')
-    .select('access_token, team_id')
-    .limit(1)
-    .single()
-  if (error) {
-    if (error.code !== 'PGRST116') console.error('getConnection DB error:', error)
-    return null
-  }
-  if (!data) return null
-  return data as { access_token: string; team_id: string }
 }
 
 async function listSlackChannels(botToken: string): Promise<SlackChannel[]> {

@@ -51,7 +51,7 @@ export const handler: Handler = async (event) => {
 
   const clientId = process.env.SLACK_CLIENT_ID ?? ''
   const clientSecret = process.env.SLACK_CLIENT_SECRET ?? ''
-  const redirectUri = process.env.SLACK_REDIRECT_URI ?? ''
+  const redirectUri = `https://${event.headers.host}/.netlify/functions/slack-oauth`
   const supabaseUrl = process.env.SUPABASE_URL ?? ''
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
 
