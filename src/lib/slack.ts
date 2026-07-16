@@ -1,4 +1,4 @@
-const BOT_SCOPES = 'channels:history,channels:read,chat:write,im:write'
+const BOT_SCOPES = 'channels:history,channels:manage,channels:read,chat:write,im:write'
 
 interface SlackOAuthUrlParams {
   clientId: string

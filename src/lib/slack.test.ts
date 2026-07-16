@@ -28,8 +28,9 @@ describe('buildSlackOAuthUrl', () => {
       redirectUri: 'https://x.com/cb',
     })
     const scope = new URL(url).searchParams.get('scope') ?? ''
-    expect(scope).toContain('channels:read')
     expect(scope).toContain('channels:history')
+    expect(scope).toContain('channels:manage')
+    expect(scope).toContain('channels:read')
     expect(scope).toContain('chat:write')
     expect(scope).toContain('im:write')
   })
