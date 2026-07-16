@@ -8,6 +8,11 @@ documents/tracks/
 .env
 .env.*
 
+node_modules/
+dist/
+test-results/
+playwright-report/
+
 # 이 폴더에 이미 있던 무관한 별개 레포 — Singo 레포에 포함하지 않는다
 jisun-workspace/
 tracker-boot-design/
