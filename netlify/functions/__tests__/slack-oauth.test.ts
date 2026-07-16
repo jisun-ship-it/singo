@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { handler } from './slack-oauth'
+import { handler } from '../slack-oauth'
 import type { HandlerEvent } from '@netlify/functions'
 
 function makeEvent(params: Record<string, string>): HandlerEvent {
