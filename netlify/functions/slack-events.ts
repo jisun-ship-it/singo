@@ -51,17 +51,15 @@ async function getChannelName(botToken: string, channelId: string): Promise<stri
   return data.channel?.name ?? channelId
 }
 
-async function translateWithClaude(text: string, apiKey: string): Promise<string> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+async function translateWithOpenAI(text: string, apiKey: string): Promise<string> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5',
-      max_tokens: 1024,
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'user',
@@ -71,13 +69,16 @@ async function translateWithClaude(text: string, apiKey: string): Promise<string
     }),
   })
   if (!response.ok) {
-    throw new Error(`Anthropic API error: HTTP ${response.status}`)
+    throw new Error(`OpenAI API error: HTTP ${response.status}`)
   }
-  const data = (await response.json()) as { content?: Array<{ type: string; text: string }> }
-  if (!data.content) {
-    throw new Error('Anthropic API returned no content')
+  const data = (await response.json()) as {
+    choices?: Array<{ message: { content: string } }>
   }
-  return data.content.find((c) => c.type === 'text')?.text ?? text
+  const translated = data.choices?.[0]?.message?.content
+  if (!translated) {
+    throw new Error('OpenAI API returned no content')
+  }
+  return translated
 }
 
 async function findOrCreateMirrorChannel(botToken: string, sourceName: string): Promise<string> {
@@ -161,7 +162,7 @@ export const handler: Handler = async (event) => {
 
   const supabaseUrl = process.env.SUPABASE_URL ?? ''
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
-  const anthropicApiKey = process.env.ANTHROPIC_API_KEY ?? ''
+  const openaiApiKey = process.env.OPENAI_API_KEY ?? ''
 
   const supabase = createClient(supabaseUrl, serviceRoleKey)
   const connection = await getConnection(supabase)
@@ -172,7 +173,7 @@ export const handler: Handler = async (event) => {
 
   try {
     const channelName = await getChannelName(connection.access_token, messageEvent.channel)
-    const translatedText = await translateWithClaude(messageEvent.text, anthropicApiKey)
+    const translatedText = await translateWithOpenAI(messageEvent.text, openaiApiKey)
     const mirrorChannelId = await findOrCreateMirrorChannel(connection.access_token, channelName)
     await postToSlack(connection.access_token, mirrorChannelId, translatedText)
   } catch (err) {

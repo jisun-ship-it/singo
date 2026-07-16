@@ -70,9 +70,9 @@ const CONVERSATIONS_INFO_OK = {
   json: async () => ({ ok: true, channel: { id: 'C001', name: 'client-jp' } }),
 } as Response
 
-const ANTHROPIC_TRANSLATE_OK = {
+const OPENAI_TRANSLATE_OK = {
   ok: true,
-  json: async () => ({ content: [{ type: 'text', text: 'Hello' }] }),
+  json: async () => ({ choices: [{ message: { content: 'Hello' } }] }),
 } as Response
 
 const CONVERSATIONS_CREATE_OK = {
@@ -113,7 +113,7 @@ describe('slack-events handler — early exits (no DB/fetch)', () => {
     vi.stubGlobal('fetch', vi.fn())
     vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
-    vi.stubEnv('ANTHROPIC_API_KEY', 'test-api-key')
+    vi.stubEnv('OPENAI_API_KEY', 'test-api-key')
   })
 
   it('ignores unknown top-level event types', async () => {
@@ -148,7 +148,7 @@ describe('slack-events handler — error handling', () => {
     vi.stubGlobal('fetch', vi.fn())
     vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
-    vi.stubEnv('ANTHROPIC_API_KEY', 'test-api-key')
+    vi.stubEnv('OPENAI_API_KEY', 'test-api-key')
   })
 
   it('returns 200 and logs when Claude API responds with non-ok HTTP status', async () => {
@@ -173,7 +173,7 @@ describe('slack-events handler — error handling', () => {
     makeSupabaseMock()
     vi.mocked(fetch)
       .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
-      .mockResolvedValueOnce(ANTHROPIC_TRANSLATE_OK)
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
       .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
       .mockResolvedValueOnce({
         ok: true,
@@ -213,7 +213,7 @@ describe('slack-events handler — subscribed channel routing', () => {
     vi.stubGlobal('fetch', vi.fn())
     vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
-    vi.stubEnv('ANTHROPIC_API_KEY', 'test-api-key')
+    vi.stubEnv('OPENAI_API_KEY', 'test-api-key')
   })
 
   it('ignores message from non-subscribed channel', async () => {
@@ -230,7 +230,7 @@ describe('slack-events handler — subscribed channel routing', () => {
     makeSupabaseMock()
     vi.mocked(fetch)
       .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)      // conversations.info → channel name
-      .mockResolvedValueOnce(ANTHROPIC_TRANSLATE_OK)     // Claude API → translated text
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)     // OpenAI → translated text
       .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)    // conversations.create → new mirror
       .mockResolvedValueOnce(CHAT_POST_OK)               // chat.postMessage
 
@@ -247,7 +247,7 @@ describe('slack-events handler — subscribed channel routing', () => {
     makeSupabaseMock()
     vi.mocked(fetch)
       .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)             // conversations.info
-      .mockResolvedValueOnce(ANTHROPIC_TRANSLATE_OK)            // Claude API
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)            // OpenAI
       .mockResolvedValueOnce(CONVERSATIONS_CREATE_NAME_TAKEN)   // create → name_taken
       .mockResolvedValueOnce(CONVERSATIONS_LIST_WITH_MIRROR)    // list → find existing
       .mockResolvedValueOnce(CHAT_POST_OK)                      // chat.postMessage
