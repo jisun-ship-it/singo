@@ -66,6 +66,17 @@ describe('Settings — header', () => {
       expect(within(screen.getByRole('banner')).getByText('Test Workspace')).toBeInTheDocument(),
     )
   })
+
+  it('renders logo mark image in Settings header', () => {
+    render(<Settings />)
+    expect(within(screen.getByRole('banner')).getByRole('img', { name: /singo logo/i })).toBeInTheDocument()
+  })
+
+  it('renders Singo wordmark with Manrope font in Settings header', () => {
+    render(<Settings />)
+    const wordmark = within(screen.getByRole('banner')).getByText('Singo')
+    expect(wordmark.style.fontFamily).toContain('Manrope')
+  })
 })
 
 describe('Settings — channel subscriptions', () => {

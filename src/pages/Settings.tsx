@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { buildSlackOAuthUrl } from '../lib/slack'
+import { BrandLogo } from '../components/BrandLogo'
 import {
   fetchChannels,
   setSubscription,
@@ -105,12 +106,7 @@ export function Settings() {
           zIndex: 100,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div
-            style={{ width: 10, height: 10, borderRadius: '50%', background: '#F26B3A', flexShrink: 0 }}
-          />
-          <span style={{ fontSize: 18, fontWeight: 600, color: '#1F2328' }}>Singo</span>
-        </div>
+        <BrandLogo size={28} fontSize={18} />
         {workspace && (
           <>
             <div style={{ width: 1, height: 20, background: '#E8E5E1' }} />
