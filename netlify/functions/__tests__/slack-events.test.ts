@@ -21,6 +21,21 @@ function makeEvent(body: object): HandlerEvent {
   }
 }
 
+function makeRawBodyEvent(body: string): HandlerEvent {
+  return {
+    httpMethod: 'POST',
+    body,
+    queryStringParameters: {},
+    headers: {},
+    isBase64Encoded: false,
+    path: '/.netlify/functions/slack-events',
+    rawUrl: '',
+    rawQuery: '',
+    multiValueHeaders: {},
+    multiValueQueryStringParameters: {},
+  }
+}
+
 function makeMessageEvent(channelId: string, text = 'こんにちは', botId?: string, threadTs?: string) {
   return makeEvent({
     type: 'event_callback',
@@ -137,6 +152,23 @@ const USERS_INFO_FAIL = {
   ok: true,
   json: async () => ({ ok: false, error: 'user_not_found' }),
 } as Response
+
+describe('slack-events handler — empty body resilience', () => {
+  it('returns 200 without crashing when event.body is empty string', async () => {
+    const event = makeRawBodyEvent('')
+    const result = await handler(event, {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+  })
+
+  it('parses valid JSON body normally', async () => {
+    const event = makeRawBodyEvent(JSON.stringify({ type: 'url_verification', challenge: 'test123' }))
+    const result = await handler(event, {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(JSON.parse(result?.body ?? '{}')).toEqual({ challenge: 'test123' })
+  })
+})
 
 describe('slack-events handler — url_verification', () => {
   it('responds with challenge', async () => {
