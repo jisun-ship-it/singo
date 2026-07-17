@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { Landing } from './Landing'
 
 beforeEach(() => {
@@ -24,6 +24,20 @@ describe('Landing — Hero section', () => {
     render(<Landing />)
     const link = screen.getByRole('link', { name: /Connect Slack/i })
     expect(link).toHaveAttribute('href', expect.stringContaining('slack.com/oauth/v2/authorize'))
+  })
+})
+
+describe('Landing — header logo', () => {
+  it('renders logo mark image in landing header', () => {
+    render(<Landing />)
+    expect(within(screen.getByRole('banner')).getByRole('img', { name: /singo logo/i })).toBeInTheDocument()
+  })
+
+  it('renders Singo wordmark with Manrope font in landing header', () => {
+    render(<Landing />)
+    const wordmark = within(screen.getByRole('banner')).getByText('Singo')
+    expect(wordmark).toBeInTheDocument()
+    expect(wordmark.style.fontFamily).toContain('Manrope')
   })
 })
 

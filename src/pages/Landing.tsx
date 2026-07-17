@@ -1,4 +1,5 @@
 import { buildSlackOAuthUrl } from '../lib/slack'
+import { BrandLogo } from '../components/BrandLogo'
 
 const SLACK_CLIENT_ID = import.meta.env.VITE_SLACK_CLIENT_ID ?? ''
 const SLACK_CALLBACK_PATH = '/.netlify/functions/slack-oauth'
@@ -156,6 +157,20 @@ export function Landing() {
 
   return (
     <div style={{ background: '#FCFAF7', minHeight: '100vh', fontFamily: 'inherit' }}>
+      <header
+        role="banner"
+        style={{
+          maxWidth: 1120,
+          margin: '0 auto',
+          padding: '0 40px',
+          height: 56,
+          display: 'flex',
+          alignItems: 'center',
+        }}
+      >
+        <BrandLogo size={20} />
+      </header>
+
       {/* Hero */}
       <section
         style={{
@@ -261,10 +276,9 @@ export function Landing() {
           borderTop: '1px solid #E8E5E1',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#F26B3A' }} />
-          <span style={{ fontSize: 15, fontWeight: 600 }}>Singo</span>
-          <span style={{ fontSize: 14, color: '#98928a', marginLeft: 8 }}>Slack + Lingo</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <BrandLogo size={16} />
+          <span style={{ fontSize: 14, color: '#98928a' }}>Slack + Lingo</span>
         </div>
         <div style={{ fontSize: 13, color: '#98928a' }}>© 2026 Singo</div>
       </footer>
