@@ -168,7 +168,7 @@ export function Landing() {
           alignItems: 'center',
         }}
       >
-        <BrandLogo size={20} />
+        <BrandLogo size={32} fontSize={20} />
       </header>
 
       {/* Hero */}
@@ -277,7 +277,7 @@ export function Landing() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <BrandLogo size={16} />
+          <BrandLogo size={16} fontSize={15} />
           <span style={{ fontSize: 14, color: '#98928a' }}>Slack + Lingo</span>
         </div>
         <div style={{ fontSize: 13, color: '#98928a' }}>© 2026 Singo</div>

@@ -106,7 +106,7 @@ export function Settings() {
           zIndex: 100,
         }}
       >
-        <BrandLogo size={20} />
+        <BrandLogo size={28} fontSize={18} />
         {workspace && (
           <>
             <div style={{ width: 1, height: 20, background: '#E8E5E1' }} />
