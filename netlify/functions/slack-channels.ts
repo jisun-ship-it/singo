@@ -27,6 +27,20 @@ async function listSlackChannels(botToken: string): Promise<SlackChannel[]> {
   return data.channels ?? []
 }
 
+async function getMirrorChannelIds(
+  supabase: ReturnType<typeof createClient>,
+  teamId: string,
+): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('mirror_channels')
+    .select('channel_id')
+    .eq('team_id', teamId)
+  if (error) console.error('getMirrorChannelIds DB error:', error)
+  return new Set(
+    (data ?? []).map((r: { channel_id: string }) => r.channel_id),
+  )
+}
+
 async function getSubscriptionData(
   supabase: ReturnType<typeof createClient>,
   teamId: string,
@@ -70,6 +84,7 @@ export const handler: Handler = async (event) => {
       }
     }
     const subscriptionMap = await getSubscriptionData(supabase, connection.team_id)
+    const mirrorChannelIds = await getMirrorChannelIds(supabase, connection.team_id)
 
     const result = channels.map((ch) => {
       const sub = subscriptionMap.get(ch.id)
@@ -80,6 +95,7 @@ export const handler: Handler = async (event) => {
         num_members: ch.num_members,
         subscribed: sub?.subscribed === true,
         target_language: sub?.target_language ?? null,
+        is_mirror: mirrorChannelIds.has(ch.id) || ch.name.startsWith('mirror-'),
       }
     })
 

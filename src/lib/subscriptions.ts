@@ -5,6 +5,7 @@ export interface Channel {
   target_language: string | null
   is_private: boolean
   num_members: number
+  is_mirror: boolean
 }
 
 export interface WorkspaceInfo {
