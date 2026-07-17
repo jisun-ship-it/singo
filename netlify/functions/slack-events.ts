@@ -151,14 +151,47 @@ async function findOrCreateMirrorChannel(
   throw new Error(`Failed to find or create mirror channel for ${sourceName}`)
 }
 
+interface SenderInfo {
+  username: string
+  icon_url: string
+}
+
+async function getSenderInfo(botToken: string, userId: string): Promise<SenderInfo | null> {
+  try {
+    const response = await fetch(`https://slack.com/api/users.info?user=${userId}`, {
+      headers: { Authorization: `Bearer ${botToken}` },
+    })
+    const data = (await response.json()) as {
+      ok: boolean
+      user?: { real_name?: string; profile?: { image_192?: string } }
+    }
+    if (!data.ok || !data.user) return null
+    const username = data.user.real_name ?? ''
+    const icon_url = data.user.profile?.image_192 ?? ''
+    if (!username && !icon_url) return null
+    return { username, icon_url }
+  } catch {
+    return null
+  }
+}
+
 async function postToSlack(
   botToken: string,
   channelId: string,
   text: string,
   threadTs?: string,
+  senderInfo?: SenderInfo | null,
 ): Promise<string> {
-  const body: { channel: string; text: string; thread_ts?: string } = { channel: channelId, text }
+  const body: {
+    channel: string
+    text: string
+    thread_ts?: string
+    username?: string
+    icon_url?: string
+  } = { channel: channelId, text }
   if (threadTs) body.thread_ts = threadTs
+  if (senderInfo?.username) body.username = senderInfo.username
+  if (senderInfo?.icon_url) body.icon_url = senderInfo.icon_url
   const response = await fetch('https://slack.com/api/chat.postMessage', {
     method: 'POST',
     headers: {
@@ -295,15 +328,18 @@ export const handler: Handler = async (event) => {
     console.log('[slack-events] channelName:', channelName)
     const translatedText = await translateWithOpenAI(messageEvent.text, openaiApiKey, subscription.targetLanguage)
     console.log('[slack-events] translated:', translatedText)
+    const senderInfo = messageEvent.user
+      ? await getSenderInfo(connection.access_token, messageEvent.user)
+      : null
     const mirrorChannelId = await findOrCreateMirrorChannel(connection.access_token, channelName, supabase, connection.team_id)
     console.log('[slack-events] mirrorChannelId:', mirrorChannelId)
 
     if (messageEvent.thread_ts) {
       const mapping = await lookupMirrorMapping(supabase, messageEvent.channel, messageEvent.thread_ts)
-      const postedTs = await postToSlack(connection.access_token, mirrorChannelId, translatedText, mapping?.mirrorTs)
+      const postedTs = await postToSlack(connection.access_token, mirrorChannelId, translatedText, mapping?.mirrorTs, senderInfo)
       await saveMirrorMapping(supabase, messageEvent.channel, messageEvent.ts, mirrorChannelId, postedTs)
     } else {
-      const mirrorTs = await postToSlack(connection.access_token, mirrorChannelId, translatedText)
+      const mirrorTs = await postToSlack(connection.access_token, mirrorChannelId, translatedText, undefined, senderInfo)
       await saveMirrorMapping(supabase, messageEvent.channel, messageEvent.ts, mirrorChannelId, mirrorTs)
     }
     console.log('[slack-events] posted successfully')

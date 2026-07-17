@@ -125,6 +125,19 @@ const CHAT_DELETE_OK = {
   json: async () => ({ ok: true }),
 } as Response
 
+const USERS_INFO_OK = {
+  ok: true,
+  json: async () => ({
+    ok: true,
+    user: { real_name: 'Jane Doe', profile: { image_192: 'https://example.com/avatar.jpg' } },
+  }),
+} as Response
+
+const USERS_INFO_FAIL = {
+  ok: true,
+  json: async () => ({ ok: false, error: 'user_not_found' }),
+} as Response
+
 describe('slack-events handler — url_verification', () => {
   it('responds with challenge', async () => {
     const event = makeEvent({ type: 'url_verification', challenge: 'abc123' })
@@ -265,6 +278,7 @@ describe('slack-events handler — error handling', () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
       .mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({}) } as Response)
+      // OpenAI fails above — getSenderInfo is not reached
 
     const result = await handler(makeMessageEvent('C001'), {} as never, vi.fn())
 
@@ -282,6 +296,7 @@ describe('slack-events handler — error handling', () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
       .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(USERS_INFO_OK)
       .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
       .mockResolvedValueOnce({
         ok: true,
@@ -343,6 +358,7 @@ describe('slack-events handler — diagnostic logs', () => {
         capturedHeaders = init?.headers as Record<string, string>
         return OPENAI_TRANSLATE_OK as Response
       })
+      .mockResolvedValueOnce(USERS_INFO_OK)
       .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
       .mockResolvedValueOnce(CHAT_POST_OK)
 
@@ -357,6 +373,7 @@ describe('slack-events handler — diagnostic logs', () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
       .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(USERS_INFO_OK)
       .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
       .mockResolvedValueOnce(CHAT_POST_OK)
 
@@ -413,15 +430,16 @@ describe('slack-events handler — subscribed channel routing', () => {
   it('translates and posts to mirror channel when mirror already exists', async () => {
     makeSupabaseMock()
     vi.mocked(fetch)
-      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)      // conversations.info → channel name
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)   // conversations.info → channel name
       .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)     // OpenAI → translated text
-      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)    // conversations.create → new mirror
-      .mockResolvedValueOnce(CHAT_POST_OK)               // chat.postMessage
+      .mockResolvedValueOnce(USERS_INFO_OK)           // users.info → sender info
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK) // conversations.create → new mirror
+      .mockResolvedValueOnce(CHAT_POST_OK)            // chat.postMessage
 
     const result = await handler(makeMessageEvent('C001', 'こんにちは'), {} as never, vi.fn())
 
     expect(result?.statusCode).toBe(200)
-    const postCallArgs = vi.mocked(fetch).mock.calls[3]
+    const postCallArgs = vi.mocked(fetch).mock.calls[4]
     const postBody = JSON.parse((postCallArgs[1] as RequestInit).body as string)
     expect(postBody.channel).toBe('C_MIRROR')
     expect(postBody.text).toBe('Hello')
@@ -430,16 +448,17 @@ describe('slack-events handler — subscribed channel routing', () => {
   it('finds existing mirror channel when name_taken and posts', async () => {
     makeSupabaseMock()
     vi.mocked(fetch)
-      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)             // conversations.info
-      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)            // OpenAI
-      .mockResolvedValueOnce(CONVERSATIONS_CREATE_NAME_TAKEN)   // create → name_taken
-      .mockResolvedValueOnce(CONVERSATIONS_LIST_WITH_MIRROR)    // list → find existing
-      .mockResolvedValueOnce(CHAT_POST_OK)                      // chat.postMessage
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)           // conversations.info
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)             // OpenAI
+      .mockResolvedValueOnce(USERS_INFO_OK)                   // users.info → sender info
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_NAME_TAKEN) // create → name_taken
+      .mockResolvedValueOnce(CONVERSATIONS_LIST_WITH_MIRROR)  // list → find existing
+      .mockResolvedValueOnce(CHAT_POST_OK)                    // chat.postMessage
 
     const result = await handler(makeMessageEvent('C001', 'こんにちは'), {} as never, vi.fn())
 
     expect(result?.statusCode).toBe(200)
-    const postCallArgs = vi.mocked(fetch).mock.calls[4]
+    const postCallArgs = vi.mocked(fetch).mock.calls[5]
     const postBody = JSON.parse((postCallArgs[1] as RequestInit).body as string)
     expect(postBody.channel).toBe('C_EXISTING')
     expect(postBody.text).toBe('Hello')
@@ -450,6 +469,7 @@ describe('slack-events handler — subscribed channel routing', () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
       .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(USERS_INFO_OK)
       .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
       .mockResolvedValueOnce(CHAT_POST_OK)
 
@@ -466,6 +486,7 @@ describe('slack-events handler — subscribed channel routing', () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
       .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(USERS_INFO_OK)
       .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
       .mockResolvedValueOnce(CHAT_POST_OK)
 
@@ -489,6 +510,7 @@ describe('slack-events handler — subscribed channel routing', () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
       .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(USERS_INFO_OK)
       .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
       .mockResolvedValueOnce(CHAT_POST_OK)
 
@@ -526,6 +548,7 @@ describe('slack-events handler — Gherkin Scenario: 채널별 번역 언어 지
         capturedBody = JSON.parse(init?.body as string) as { messages: Array<{ content: string }> }
         return OPENAI_TRANSLATE_OK as Response
       })
+      .mockResolvedValueOnce(USERS_INFO_OK)
       .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
       .mockResolvedValueOnce(CHAT_POST_OK)
 
@@ -545,6 +568,7 @@ describe('slack-events handler — Gherkin Scenario: 채널별 번역 언어 지
         capturedBody = JSON.parse(init?.body as string) as { messages: Array<{ content: string }> }
         return OPENAI_TRANSLATE_OK as Response
       })
+      .mockResolvedValueOnce(USERS_INFO_OK)
       .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
       .mockResolvedValueOnce(CHAT_POST_OK)
 
@@ -572,6 +596,7 @@ describe('slack-events handler — Gherkin Scenario: 스레드 답글 미러링'
     vi.mocked(fetch)
       .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
       .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(USERS_INFO_OK)
       .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
       .mockResolvedValueOnce(CHAT_POST_OK)
 
@@ -582,7 +607,7 @@ describe('slack-events handler — Gherkin Scenario: 스레드 답글 미러링'
     )
 
     expect(result?.statusCode).toBe(200)
-    const postCallArgs = vi.mocked(fetch).mock.calls[3]
+    const postCallArgs = vi.mocked(fetch).mock.calls[4]
     const postBody = JSON.parse((postCallArgs[1] as RequestInit).body as string)
     expect(postBody.channel).toBe('C_MIRROR')
     expect(postBody.text).toBe('Hello')
@@ -596,6 +621,7 @@ describe('slack-events handler — Gherkin Scenario: 스레드 답글 미러링'
     vi.mocked(fetch)
       .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
       .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(USERS_INFO_OK)
       .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
       .mockResolvedValueOnce(CHAT_POST_OK)
 
@@ -606,10 +632,78 @@ describe('slack-events handler — Gherkin Scenario: 스레드 답글 미러링'
     )
 
     expect(result?.statusCode).toBe(200)
-    const postCallArgs = vi.mocked(fetch).mock.calls[3]
+    const postCallArgs = vi.mocked(fetch).mock.calls[4]
     const postBody = JSON.parse((postCallArgs[1] as RequestInit).body as string)
     expect(postBody.channel).toBe('C_MIRROR')
     expect(postBody.thread_ts).toBeUndefined()
+  })
+})
+
+describe('slack-events handler — Gherkin Scenario: 발신자 이름·아이콘 표시', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+    vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
+    vi.stubEnv('OPEN_API_KEY', 'test-api-key')
+  })
+
+  it('includes sender username and icon_url in chat.postMessage when users.info succeeds', async () => {
+    makeSupabaseMock()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(USERS_INFO_OK)
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    await handler(makeMessageEvent('C001'), {} as never, vi.fn())
+
+    const postCall = vi.mocked(fetch).mock.calls.find(
+      (call) => String(call[0]).includes('chat.postMessage'),
+    )
+    expect(postCall).toBeDefined()
+    const postBody = JSON.parse((postCall![1] as RequestInit).body as string)
+    expect(postBody.username).toBe('Jane Doe')
+    expect(postBody.icon_url).toBe('https://example.com/avatar.jpg')
+  })
+
+  it('calls users.info with the message sender user id', async () => {
+    makeSupabaseMock()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(USERS_INFO_OK)
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    await handler(makeMessageEvent('C001'), {} as never, vi.fn())
+
+    const usersInfoCall = vi.mocked(fetch).mock.calls.find(
+      (call) => String(call[0]).includes('users.info'),
+    )
+    expect(usersInfoCall).toBeDefined()
+    expect(String(usersInfoCall![0])).toContain('user=U123')
+  })
+
+  it('posts message without username and icon_url when users.info returns ok=false', async () => {
+    makeSupabaseMock()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(USERS_INFO_FAIL)
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    const result = await handler(makeMessageEvent('C001'), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    const postCall = vi.mocked(fetch).mock.calls.find(
+      (call) => String(call[0]).includes('chat.postMessage'),
+    )
+    expect(postCall).toBeDefined()
+    const postBody = JSON.parse((postCall![1] as RequestInit).body as string)
+    expect(postBody.username).toBeUndefined()
+    expect(postBody.icon_url).toBeUndefined()
   })
 })
 

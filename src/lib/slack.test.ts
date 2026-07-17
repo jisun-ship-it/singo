@@ -34,5 +34,7 @@ describe('buildSlackOAuthUrl', () => {
     expect(scope).toContain('chat:write')
     expect(scope).toContain('im:write')
     expect(scope).toContain('channels:join')
+    expect(scope).toContain('users:read')
+    expect(scope).toContain('chat:write.customize')
   })
 })
