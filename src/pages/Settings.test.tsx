@@ -237,6 +237,30 @@ describe('Settings — mirror channels', () => {
   })
 })
 
+describe('Settings — subscribed channels sort', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'location', {
+      value: { origin: 'https://test.example.com', search: '?connected=true' },
+      writable: true,
+    })
+    vi.mocked(subscriptions.fetchChannels).mockResolvedValue({
+      workspace: mockWorkspace,
+      channels: [
+        { id: 'C001', name: 'alpha', subscribed: false, target_language: null, is_private: false, num_members: 5, is_mirror: false },
+        { id: 'C002', name: 'beta', subscribed: true, target_language: null, is_private: false, num_members: 3, is_mirror: false },
+        { id: 'C003', name: 'gamma', subscribed: false, target_language: null, is_private: false, num_members: 2, is_mirror: false },
+      ],
+    })
+  })
+
+  it('shows subscribed channels before unsubscribed channels', async () => {
+    render(<Settings />)
+    await waitFor(() => screen.getByText('#beta'))
+    const channelNames = screen.getAllByText(/^#(alpha|beta|gamma)$/)
+    expect(channelNames[0]).toHaveTextContent('#beta')
+  })
+})
+
 describe('Settings — language selection', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'location', {
