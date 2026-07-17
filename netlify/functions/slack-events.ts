@@ -6,6 +6,7 @@ import {
   findOrCreateMirrorChannel,
   getChannelName,
   getSenderInfo,
+  inviteUserToChannel,
   postToSlack,
 } from './slack-api'
 
@@ -203,6 +204,10 @@ export const handler: Handler = async (event) => {
       : null
     const mirrorChannelId = await findOrCreateMirrorChannel(connection.access_token, channelName, supabase, connection.team_id)
     console.log('[slack-events] mirrorChannelId:', mirrorChannelId)
+
+    if (connection.authed_user_id) {
+      await inviteUserToChannel(connection.access_token, mirrorChannelId, connection.authed_user_id)
+    }
 
     if (messageEvent.thread_ts) {
       const mapping = await lookupMirrorMapping(supabase, messageEvent.channel, messageEvent.thread_ts)
