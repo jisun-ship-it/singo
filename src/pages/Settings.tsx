@@ -26,6 +26,137 @@ function getLangLabel(value: string): string {
   return LANGUAGE_OPTIONS.find((o) => o.value === value)?.label ?? value
 }
 
+function ChannelRow({
+  channel,
+  openDropdownId,
+  onToggle,
+  onDropdownToggle,
+  onLanguageChange,
+}: {
+  channel: Channel
+  openDropdownId: string | null
+  onToggle: (channel: Channel) => void
+  onDropdownToggle: (id: string | null) => void
+  onLanguageChange: (channel: Channel, language: string) => void
+}) {
+  return (
+    <li
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 16,
+        padding: '18px 4px',
+        borderBottom: '1px solid #EDEAE5',
+      }}
+    >
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 500 }}>#{channel.name}</div>
+        <div style={{ fontSize: 13, color: '#98928a', marginTop: 2 }}>{channel.num_members} members</div>
+      </div>
+      <span style={channel.is_private ? PRIVATE_BADGE_STYLE : PUBLIC_BADGE_STYLE}>
+        {channel.is_private ? 'Private' : 'Public'}
+      </span>
+
+      {channel.subscribed ? (
+        <>
+          <button
+            onClick={() => onToggle(channel)}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              color: '#98928a',
+              textDecoration: 'underline',
+              cursor: 'pointer',
+              fontSize: 14,
+            }}
+          >
+            Unsubscribe
+          </button>
+
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => onDropdownToggle(openDropdownId === channel.id ? null : channel.id)}
+              style={{
+                background: '#fff',
+                border: '1px solid #E8E5E1',
+                borderRadius: 11,
+                padding: '9px 13px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 14,
+              }}
+            >
+              <span style={{ color: '#3a9e6a' }}>✓</span>
+              {getLangLabel(channel.target_language ?? 'English')}
+              <span style={{ fontSize: 10 }}>▾</span>
+            </button>
+
+            {openDropdownId === channel.id && (
+              <ul
+                role="listbox"
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 4px)',
+                  left: 0,
+                  background: '#fff',
+                  borderRadius: 14,
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                  padding: '6px 0',
+                  margin: 0,
+                  listStyle: 'none',
+                  minWidth: 140,
+                  zIndex: 200,
+                }}
+              >
+                {LANGUAGE_OPTIONS.map((opt) => (
+                  <li
+                    key={opt.value}
+                    role="option"
+                    aria-selected={(channel.target_language ?? 'English') === opt.value}
+                    onClick={() => onLanguageChange(channel, opt.value)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 14px',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                    }}
+                  >
+                    {opt.label}
+                    {(channel.target_language ?? 'English') === opt.value && (
+                      <span style={{ color: '#F26B3A' }}>✓</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      ) : (
+        <button
+          onClick={() => onToggle(channel)}
+          style={{
+            background: '#1F2328',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 11,
+            padding: '10px 18px',
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          Subscribe
+        </button>
+      )}
+    </li>
+  )
+}
+
 function WorkspaceAvatar({ name }: { name: string }) {
   return (
     <div
@@ -155,124 +286,16 @@ export function Settings() {
                 {channels
                   .filter((c) => !c.is_mirror)
                   .filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .sort((a, b) => Number(b.subscribed) - Number(a.subscribed))
                   .map((channel) => (
-                    <li
+                    <ChannelRow
                       key={channel.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 16,
-                        padding: '18px 4px',
-                        borderBottom: '1px solid #EDEAE5',
-                      }}
-                    >
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 500 }}>#{channel.name}</div>
-                        <div style={{ fontSize: 13, color: '#98928a', marginTop: 2 }}>{channel.num_members} members</div>
-                      </div>
-                      <span style={channel.is_private ? PRIVATE_BADGE_STYLE : PUBLIC_BADGE_STYLE}>
-                        {channel.is_private ? 'Private' : 'Public'}
-                      </span>
-
-                      {channel.subscribed ? (
-                        <>
-                          <button
-                            onClick={() => handleToggle(channel)}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              padding: 0,
-                              color: '#98928a',
-                              textDecoration: 'underline',
-                              cursor: 'pointer',
-                              fontSize: 14,
-                            }}
-                          >
-                            Unsubscribe
-                          </button>
-
-                          <div style={{ position: 'relative' }}>
-                            <button
-                              onClick={() =>
-                                setOpenDropdownId(openDropdownId === channel.id ? null : channel.id)
-                              }
-                              style={{
-                                background: '#fff',
-                                border: '1px solid #E8E5E1',
-                                borderRadius: 11,
-                                padding: '9px 13px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 6,
-                                fontSize: 14,
-                              }}
-                            >
-                              <span style={{ color: '#3a9e6a' }}>✓</span>
-                              {getLangLabel(channel.target_language ?? 'English')}
-                              <span style={{ fontSize: 10 }}>▾</span>
-                            </button>
-
-                            {openDropdownId === channel.id && (
-                              <ul
-                                role="listbox"
-                                style={{
-                                  position: 'absolute',
-                                  top: 'calc(100% + 4px)',
-                                  left: 0,
-                                  background: '#fff',
-                                  borderRadius: 14,
-                                  boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                  padding: '6px 0',
-                                  margin: 0,
-                                  listStyle: 'none',
-                                  minWidth: 140,
-                                  zIndex: 200,
-                                }}
-                              >
-                                {LANGUAGE_OPTIONS.map((opt) => (
-                                  <li
-                                    key={opt.value}
-                                    role="option"
-                                    aria-selected={(channel.target_language ?? 'English') === opt.value}
-                                    onClick={() => handleLanguageChange(channel, opt.value)}
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'space-between',
-                                      padding: '8px 14px',
-                                      cursor: 'pointer',
-                                      fontSize: 14,
-                                    }}
-                                  >
-                                    {opt.label}
-                                    {(channel.target_language ?? 'English') === opt.value && (
-                                      <span style={{ color: '#F26B3A' }}>✓</span>
-                                    )}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-                        </>
-                      ) : (
-                        <button
-                          onClick={() => handleToggle(channel)}
-                          style={{
-                            background: '#1F2328',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: 11,
-                            padding: '10px 18px',
-                            fontSize: 14,
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Subscribe
-                        </button>
-                      )}
-                    </li>
+                      channel={channel}
+                      openDropdownId={openDropdownId}
+                      onToggle={handleToggle}
+                      onDropdownToggle={setOpenDropdownId}
+                      onLanguageChange={handleLanguageChange}
+                    />
                   ))}
               </ul>
             </section>
