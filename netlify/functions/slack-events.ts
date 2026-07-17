@@ -132,7 +132,7 @@ export const handler: Handler = async (event) => {
     return { statusCode: 200, body: '' }
   }
 
-  const body = JSON.parse(event.body ?? '{}') as SlackPayload
+  const body = JSON.parse(event.body || '{}') as SlackPayload
 
   if (body.type === 'url_verification') {
     return {
