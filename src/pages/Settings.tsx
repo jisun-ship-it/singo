@@ -60,6 +60,7 @@ export function Settings() {
   const [workspace, setWorkspace] = useState<WorkspaceInfo | null>(null)
   const [channelsError, setChannelsError] = useState<string | null>(null)
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     if (!connected) return
@@ -134,8 +135,27 @@ export function Settings() {
             <h2 style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-.03em', margin: '0 0 8px' }}>Your channels</h2>
             <p style={{ fontSize: 17, color: '#667085', margin: '0 0 32px' }}>Subscribe to any channel and choose the language for its live mirror.</p>
             {channelsError && <p role="alert">{channelsError}</p>}
+            <input
+              type="text"
+              placeholder="Search channels"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '14px 18px',
+                border: '1px solid #E8E5E1',
+                borderRadius: 14,
+                background: '#fff',
+                fontSize: 15,
+                boxSizing: 'border-box',
+                marginBottom: 16,
+                outline: 'none',
+              }}
+              onFocus={(e) => { e.target.style.borderColor = '#F26B3A' }}
+              onBlur={(e) => { e.target.style.borderColor = '#E8E5E1' }}
+            />
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              {channels.map((channel) => (
+              {channels.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase())).map((channel) => (
                 <li
                   key={channel.id}
                   style={{
