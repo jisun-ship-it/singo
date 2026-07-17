@@ -135,6 +135,29 @@ describe('slack-channels handler — GET', () => {
     expect(result?.statusCode).toBe(500)
   })
 
+  it('marks channel as is_mirror=true when channel name starts with mirror- even if not in DB table', async () => {
+    makeSupabaseMock({
+      subscriptions: { data: [], error: null },
+      mirrorChannels: { data: [], error: null },
+    })
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        channels: [
+          { id: 'C001', name: 'general', is_private: false, num_members: 10 },
+          { id: 'C002', name: 'mirror-general', is_private: false, num_members: 0 },
+        ],
+      }),
+    } as Response)
+
+    const result = await handler(makeEvent('GET'), {} as never, vi.fn())
+    const body = JSON.parse(result?.body ?? '{}') as { channels: Array<{ id: string; is_mirror: boolean }> }
+
+    expect(body.channels.find((c) => c.id === 'C002')?.is_mirror).toBe(true)
+    expect(body.channels.find((c) => c.id === 'C001')?.is_mirror).toBe(false)
+  })
+
   it('marks channel as is_mirror=true when its id is in mirror_channels table', async () => {
     makeSupabaseMock({
       subscriptions: { data: [], error: null },

@@ -95,7 +95,7 @@ export const handler: Handler = async (event) => {
         num_members: ch.num_members,
         subscribed: sub?.subscribed === true,
         target_language: sub?.target_language ?? null,
-        is_mirror: mirrorChannelIds.has(ch.id),
+        is_mirror: mirrorChannelIds.has(ch.id) || ch.name.startsWith('mirror-'),
       }
     })
 
