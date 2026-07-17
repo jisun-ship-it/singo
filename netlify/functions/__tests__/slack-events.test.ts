@@ -74,13 +74,17 @@ function makeSupabaseMock({
     }),
     insert: vi.fn().mockResolvedValue(mirrorMapInsert),
   }
+  const mirrorChannelsChain = {
+    upsert: vi.fn().mockResolvedValue({ error: null }),
+  }
   const mockFrom = vi.fn().mockImplementation((table: string) => {
     if (table === 'slack_connections') return connectionChain
     if (table === 'message_mirror_map') return mirrorMapChain
+    if (table === 'mirror_channels') return mirrorChannelsChain
     return subscriptionChain
   })
   vi.mocked(createClient).mockReturnValue({ from: mockFrom } as ReturnType<typeof createClient>)
-  return { mockFrom, mirrorMapChain }
+  return { mockFrom, mirrorMapChain, mirrorChannelsChain }
 }
 
 const CONVERSATIONS_INFO_OK = {
@@ -439,6 +443,22 @@ describe('slack-events handler — subscribed channel routing', () => {
     const postBody = JSON.parse((postCallArgs[1] as RequestInit).body as string)
     expect(postBody.channel).toBe('C_EXISTING')
     expect(postBody.text).toBe('Hello')
+  })
+
+  it('saves new mirror channel id to mirror_channels table when channel is created', async () => {
+    const { mirrorChannelsChain } = makeSupabaseMock()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    await handler(makeMessageEvent('C001', 'こんにちは'), {} as never, vi.fn())
+
+    expect(mirrorChannelsChain.upsert).toHaveBeenCalledWith(
+      { team_id: 'T123', channel_id: 'C_MIRROR' },
+      { onConflict: 'team_id,channel_id' },
+    )
   })
 
   it('saves mirror mapping after posting parent message', async () => {

@@ -94,7 +94,23 @@ async function translateWithOpenAI(text: string, apiKey: string, targetLanguage:
   return translated
 }
 
-async function findOrCreateMirrorChannel(botToken: string, sourceName: string): Promise<string> {
+async function saveMirrorChannelRecord(
+  supabase: ReturnType<typeof createClient>,
+  teamId: string,
+  channelId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('mirror_channels')
+    .upsert({ team_id: teamId, channel_id: channelId }, { onConflict: 'team_id,channel_id' })
+  if (error) console.error('saveMirrorChannelRecord error:', error)
+}
+
+async function findOrCreateMirrorChannel(
+  botToken: string,
+  sourceName: string,
+  supabase: ReturnType<typeof createClient>,
+  teamId: string,
+): Promise<string> {
   const mirrorName = `mirror-${sourceName}`
 
   const createResponse = await fetch('https://slack.com/api/conversations.create', {
@@ -112,6 +128,7 @@ async function findOrCreateMirrorChannel(botToken: string, sourceName: string): 
   }
 
   if (createData.ok && createData.channel) {
+    await saveMirrorChannelRecord(supabase, teamId, createData.channel.id)
     return createData.channel.id
   }
 
@@ -125,7 +142,10 @@ async function findOrCreateMirrorChannel(botToken: string, sourceName: string): 
       channels?: Array<{ id: string; name: string }>
     }
     const found = listData.channels?.find((ch) => ch.name === mirrorName)
-    if (found) return found.id
+    if (found) {
+      await saveMirrorChannelRecord(supabase, teamId, found.id)
+      return found.id
+    }
   }
 
   throw new Error(`Failed to find or create mirror channel for ${sourceName}`)
@@ -275,7 +295,7 @@ export const handler: Handler = async (event) => {
     console.log('[slack-events] channelName:', channelName)
     const translatedText = await translateWithOpenAI(messageEvent.text, openaiApiKey, subscription.targetLanguage)
     console.log('[slack-events] translated:', translatedText)
-    const mirrorChannelId = await findOrCreateMirrorChannel(connection.access_token, channelName)
+    const mirrorChannelId = await findOrCreateMirrorChannel(connection.access_token, channelName, supabase, connection.team_id)
     console.log('[slack-events] mirrorChannelId:', mirrorChannelId)
 
     if (messageEvent.thread_ts) {

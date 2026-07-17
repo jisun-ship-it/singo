@@ -8,8 +8,8 @@ vi.mock('../lib/subscriptions')
 
 const mockWorkspace = { name: 'Test Workspace', teamId: 'T123' }
 const mockChannels = [
-  { id: 'C001', name: 'client-jp', subscribed: false, target_language: null, is_private: false, num_members: 5 },
-  { id: 'C002', name: 'general', subscribed: true, target_language: null, is_private: true, num_members: 42 },
+  { id: 'C001', name: 'client-jp', subscribed: false, target_language: null, is_private: false, num_members: 5, is_mirror: false },
+  { id: 'C002', name: 'general', subscribed: true, target_language: null, is_private: true, num_members: 42, is_mirror: false },
 ]
 const mockResponse = { workspace: mockWorkspace, channels: mockChannels }
 
@@ -171,6 +171,61 @@ describe('Settings — channel search', () => {
   })
 })
 
+describe('Settings — mirror channels', () => {
+  const mirrorChannel = {
+    id: 'C_MIR',
+    name: 'mirror-client-jp',
+    subscribed: false,
+    target_language: null,
+    is_private: false,
+    num_members: 0,
+    is_mirror: true,
+  }
+
+  beforeEach(() => {
+    Object.defineProperty(window, 'location', {
+      value: { origin: 'https://test.example.com', search: '?connected=true' },
+      writable: true,
+    })
+  })
+
+  it('shows mirror channels under Mirrored channels heading', async () => {
+    vi.mocked(subscriptions.fetchChannels).mockResolvedValue({
+      workspace: mockWorkspace,
+      channels: [mirrorChannel],
+    })
+    render(<Settings />)
+    await waitFor(() => screen.getByText('#mirror-client-jp'))
+    expect(screen.getByRole('heading', { name: 'Mirrored channels' })).toBeInTheDocument()
+  })
+
+  it('does not show Subscribe button for mirror channels', async () => {
+    vi.mocked(subscriptions.fetchChannels).mockResolvedValue({
+      workspace: mockWorkspace,
+      channels: [mirrorChannel],
+    })
+    render(<Settings />)
+    await waitFor(() => screen.getByText('#mirror-client-jp'))
+    expect(screen.queryByRole('button', { name: 'Subscribe' })).not.toBeInTheDocument()
+  })
+
+  it('shows regular channels in Your channels section, not in Mirrored channels', async () => {
+    vi.mocked(subscriptions.fetchChannels).mockResolvedValue({
+      workspace: mockWorkspace,
+      channels: [
+        { ...mockChannels[0] },
+        mirrorChannel,
+      ],
+    })
+    render(<Settings />)
+    await waitFor(() => screen.getByText('#client-jp'))
+    expect(screen.getByRole('heading', { name: 'Your channels' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Mirrored channels' })).toBeInTheDocument()
+    expect(screen.getByText('#client-jp')).toBeInTheDocument()
+    expect(screen.getByText('#mirror-client-jp')).toBeInTheDocument()
+  })
+})
+
 describe('Settings — language selection', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'location', {
@@ -180,8 +235,8 @@ describe('Settings — language selection', () => {
     vi.mocked(subscriptions.fetchChannels).mockResolvedValue({
       workspace: mockWorkspace,
       channels: [
-        { id: 'C001', name: 'client-jp', subscribed: true, target_language: null, is_private: false, num_members: 3 },
-        { id: 'C002', name: 'general', subscribed: false, target_language: null, is_private: false, num_members: 10 },
+        { id: 'C001', name: 'client-jp', subscribed: true, target_language: null, is_private: false, num_members: 3, is_mirror: false },
+        { id: 'C002', name: 'general', subscribed: false, target_language: null, is_private: false, num_members: 10, is_mirror: false },
       ],
     })
     vi.mocked(subscriptions.setLanguage).mockResolvedValue(undefined)
