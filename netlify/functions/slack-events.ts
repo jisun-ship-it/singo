@@ -202,7 +202,7 @@ export const handler: Handler = async (event) => {
     const senderInfo = messageEvent.user
       ? await getSenderInfo(connection.access_token, messageEvent.user)
       : null
-    const mirrorChannelId = await findOrCreateMirrorChannel(connection.access_token, channelName, supabase, connection.team_id)
+    const mirrorChannelId = await findOrCreateMirrorChannel(connection.access_token, channelName, supabase, connection.team_id, messageEvent.channel)
     console.log('[slack-events] mirrorChannelId:', mirrorChannelId)
 
     if (connection.authed_user_id) {

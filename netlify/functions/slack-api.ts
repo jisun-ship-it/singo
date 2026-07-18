@@ -84,10 +84,11 @@ async function saveMirrorChannelRecord(
   supabase: ReturnType<typeof createClient>,
   teamId: string,
   channelId: string,
+  sourceChannelId: string,
 ): Promise<void> {
   const { error } = await supabase
     .from('mirror_channels')
-    .upsert({ team_id: teamId, channel_id: channelId }, { onConflict: 'team_id,channel_id' })
+    .upsert({ team_id: teamId, channel_id: channelId, source_channel_id: sourceChannelId }, { onConflict: 'team_id,channel_id' })
   if (error) console.error('saveMirrorChannelRecord error:', error)
 }
 
@@ -96,6 +97,7 @@ export async function findOrCreateMirrorChannel(
   sourceName: string,
   supabase: ReturnType<typeof createClient>,
   teamId: string,
+  sourceChannelId: string,
 ): Promise<string> {
   const mirrorName = `mirror-${sourceName}`
 
@@ -114,7 +116,7 @@ export async function findOrCreateMirrorChannel(
   }
 
   if (createData.ok && createData.channel) {
-    await saveMirrorChannelRecord(supabase, teamId, createData.channel.id)
+    await saveMirrorChannelRecord(supabase, teamId, createData.channel.id, sourceChannelId)
     return createData.channel.id
   }
 
@@ -129,7 +131,7 @@ export async function findOrCreateMirrorChannel(
     }
     const found = listData.channels?.find((ch) => ch.name === mirrorName)
     if (found) {
-      await saveMirrorChannelRecord(supabase, teamId, found.id)
+      await saveMirrorChannelRecord(supabase, teamId, found.id, sourceChannelId)
       return found.id
     }
   }
@@ -149,5 +151,20 @@ export async function inviteUserToChannel(botToken: string, channelId: string, u
   const data = (await response.json()) as { ok: boolean; error?: string }
   if (!data.ok && data.error !== 'already_in_channel') {
     console.error('inviteUserToChannel error:', data.error)
+  }
+}
+
+export async function kickUserFromChannel(botToken: string, channelId: string, userId: string): Promise<void> {
+  const response = await fetch('https://slack.com/api/conversations.kick', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${botToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ channel: channelId, user: userId }),
+  })
+  const data = (await response.json()) as { ok: boolean; error?: string }
+  if (!data.ok && data.error !== 'not_in_channel') {
+    console.error('kickUserFromChannel error:', data.error)
   }
 }
