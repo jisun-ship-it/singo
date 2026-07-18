@@ -136,3 +136,18 @@ export async function findOrCreateMirrorChannel(
 
   throw new Error(`Failed to find or create mirror channel for ${sourceName}`)
 }
+
+export async function inviteUserToChannel(botToken: string, channelId: string, userId: string): Promise<void> {
+  const response = await fetch('https://slack.com/api/conversations.invite', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${botToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ channel: channelId, users: userId }),
+  })
+  const data = (await response.json()) as { ok: boolean; error?: string }
+  if (!data.ok && data.error !== 'already_in_channel') {
+    console.error('inviteUserToChannel error:', data.error)
+  }
+}

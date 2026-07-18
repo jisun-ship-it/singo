@@ -153,6 +153,16 @@ const USERS_INFO_FAIL = {
   json: async () => ({ ok: false, error: 'user_not_found' }),
 } as Response
 
+const CONVERSATIONS_INVITE_OK = {
+  ok: true,
+  json: async () => ({ ok: true }),
+} as Response
+
+const CONVERSATIONS_INVITE_ALREADY_IN = {
+  ok: true,
+  json: async () => ({ ok: false, error: 'already_in_channel' }),
+} as Response
+
 describe('slack-events handler — empty body resilience', () => {
   it('returns 200 without crashing when event.body is empty string', async () => {
     const event = makeRawBodyEvent('')
@@ -795,5 +805,77 @@ describe('slack-events handler — Gherkin Scenario: 원본 메시지 삭제 시
 
     expect(result?.statusCode).toBe(200)
     expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+})
+
+describe('slack-events handler — Gherkin Scenario: 미러 채널에 자동 초대', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+    vi.stubEnv('SUPABASE_URL', 'https://db.example.supabase.co')
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
+    vi.stubEnv('OPEN_API_KEY', 'test-api-key')
+  })
+
+  it('invites authed_user_id to mirror channel after mirror creation', async () => {
+    makeSupabaseMock({
+      connection: { data: { access_token: 'xoxb-test', team_id: 'T123', authed_user_id: 'U_AUTHED' }, error: null },
+    })
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(USERS_INFO_OK)
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CONVERSATIONS_INVITE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    await handler(makeMessageEvent('C001'), {} as never, vi.fn())
+
+    const inviteCall = vi.mocked(fetch).mock.calls.find(
+      (call) => String(call[0]).includes('conversations.invite'),
+    )
+    expect(inviteCall).toBeDefined()
+    const inviteBody = JSON.parse((inviteCall![1] as RequestInit).body as string)
+    expect(inviteBody.channel).toBe('C_MIRROR')
+    expect(inviteBody.users).toBe('U_AUTHED')
+  })
+
+  it('handles already_in_channel without error and still posts message', async () => {
+    makeSupabaseMock({
+      connection: { data: { access_token: 'xoxb-test', team_id: 'T123', authed_user_id: 'U_AUTHED' }, error: null },
+    })
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(USERS_INFO_OK)
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CONVERSATIONS_INVITE_ALREADY_IN)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    const result = await handler(makeMessageEvent('C001'), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    const postCall = vi.mocked(fetch).mock.calls.find(
+      (call) => String(call[0]).includes('chat.postMessage'),
+    )
+    expect(postCall).toBeDefined()
+  })
+
+  it('skips invite when authed_user_id is null', async () => {
+    makeSupabaseMock({
+      connection: { data: { access_token: 'xoxb-test', team_id: 'T123', authed_user_id: null }, error: null },
+    })
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(CONVERSATIONS_INFO_OK)
+      .mockResolvedValueOnce(OPENAI_TRANSLATE_OK)
+      .mockResolvedValueOnce(USERS_INFO_OK)
+      .mockResolvedValueOnce(CONVERSATIONS_CREATE_OK)
+      .mockResolvedValueOnce(CHAT_POST_OK)
+
+    await handler(makeMessageEvent('C001'), {} as never, vi.fn())
+
+    const inviteCall = vi.mocked(fetch).mock.calls.find(
+      (call) => String(call[0]).includes('conversations.invite'),
+    )
+    expect(inviteCall).toBeUndefined()
   })
 })
