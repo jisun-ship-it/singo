@@ -28,7 +28,7 @@ function readEnvKey(envFile, key) {
   const line = readFileSync(envFile, 'utf8').split('\n').find((l) => l.startsWith(`${key}=`))
   return line ? line.slice(key.length + 1).trim() : ''
 }
-const GRAPHQL_URL = process.env.TRACKER_BOOT_GRAPHQL_URL || 'https://trackerboot.com/analytics/graphql'
+const GRAPHQL_URL = process.env.TRACKER_BOOT_GRAPHQL_URL || 'https://trackerboot.com/api/graphql'
 const isMain = process.argv[1] && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1])
 console.error('[promote-target] isMain 판정:', isMain, '| module url:', fileURLToPath(import.meta.url), '| argv[1]:', process.argv[1])
 if (isMain) {
