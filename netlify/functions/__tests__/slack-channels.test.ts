@@ -49,7 +49,11 @@ function makeSupabaseMock({
   }
   const mockMirrorChannelsChain = {
     select: vi.fn().mockReturnValue({
-      eq: vi.fn().mockResolvedValue(mirrorChannels),
+      eq: vi.fn().mockImplementation(() => {
+        const promise = Promise.resolve(mirrorChannels) as Promise<typeof mirrorChannels> & { eq: ReturnType<typeof vi.fn> }
+        ;(promise as any).eq = vi.fn().mockResolvedValue(mirrorChannels)
+        return promise
+      }),
     }),
   }
   const mockFrom = vi.fn().mockImplementation((table: string) => {
@@ -281,6 +285,59 @@ describe('slack-channels handler — POST', () => {
     const result = await handler(makeEvent('POST', { channelId: 'C999', subscribed: true }), {} as never, vi.fn())
 
     expect(result?.statusCode).toBe(500)
+  })
+
+  it('calls conversations.kick to remove user from mirror channel on unsubscribe', async () => {
+    const { mockUpsert } = makeSupabaseMock({
+      connection: { data: { access_token: 'xoxb-test', team_id: 'T123', team_name: 'Test Team', authed_user_id: 'U_YUJIN' }, error: null },
+      mirrorChannels: { data: [{ channel_id: 'C_MIRROR' }], error: null },
+    })
+
+    const result = await handler(makeEvent('POST', { channelId: 'C001', subscribed: false }), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      'https://slack.com/api/conversations.kick',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ channel: 'C_MIRROR', user: 'U_YUJIN' }),
+      }),
+    )
+    expect(mockUpsert).toHaveBeenCalledWith(
+      { team_id: 'T123', channel_id: 'C001', subscribed: false },
+      { onConflict: 'team_id,channel_id' },
+    )
+  })
+
+  it('skips conversations.kick when authed_user_id is null on unsubscribe', async () => {
+    const { mockUpsert } = makeSupabaseMock({
+      connection: { data: { access_token: 'xoxb-test', team_id: 'T123', team_name: 'Test Team', authed_user_id: null }, error: null },
+      mirrorChannels: { data: [{ channel_id: 'C_MIRROR' }], error: null },
+    })
+
+    const result = await handler(makeEvent('POST', { channelId: 'C001', subscribed: false }), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(vi.mocked(fetch)).not.toHaveBeenCalledWith(
+      'https://slack.com/api/conversations.kick',
+      expect.anything(),
+    )
+    expect(mockUpsert).toHaveBeenCalled()
+  })
+
+  it('treats not_in_channel from conversations.kick as success on unsubscribe', async () => {
+    makeSupabaseMock({
+      connection: { data: { access_token: 'xoxb-test', team_id: 'T123', team_name: 'Test Team', authed_user_id: 'U_YUJIN' }, error: null },
+      mirrorChannels: { data: [{ channel_id: 'C_MIRROR' }], error: null },
+    })
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: false, error: 'not_in_channel' }),
+    } as Response)
+
+    const result = await handler(makeEvent('POST', { channelId: 'C001', subscribed: false }), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
   })
 
   it('saves target_language when provided', async () => {

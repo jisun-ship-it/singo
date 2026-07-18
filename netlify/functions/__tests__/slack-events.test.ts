@@ -518,7 +518,7 @@ describe('slack-events handler — subscribed channel routing', () => {
     await handler(makeMessageEvent('C001', 'こんにちは'), {} as never, vi.fn())
 
     expect(mirrorChannelsChain.upsert).toHaveBeenCalledWith(
-      { team_id: 'T123', channel_id: 'C_MIRROR' },
+      { team_id: 'T123', channel_id: 'C_MIRROR', source_channel_id: 'C001' },
       { onConflict: 'team_id,channel_id' },
     )
   })
