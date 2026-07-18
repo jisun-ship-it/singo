@@ -1,3 +1,4 @@
+import { trackerBootHeaders } from './promote-target.mjs'
 import { realpathSync, existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
@@ -25,7 +26,7 @@ async function fetchStatus(storyId, apiKey) {
   try {
     const res = await fetch(GRAPHQL_URL, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
+      headers: trackerBootHeaders(apiKey),
       body: JSON.stringify({ query: buildStatusQuery(storyId) }),
       signal: controller.signal,
     })

@@ -18,6 +18,9 @@ export function storyFromSubject(subject) { const m = (subject || '').match(/#(\
 export function buildStoryQuery(ids) {
   return `query { ${ids.map((id, i) => `s${i}: story(storyId: "${id}") { id status } `).join(' ')} }`
 }
+export function trackerBootHeaders(apiKey) {
+  return { 'content-type': 'application/json', 'authorization': `Bearer ${apiKey}` }
+}
 export function acceptedFromResponse(json) {
   const data = json?.data
   if (!data || typeof data !== 'object') return new Set()
@@ -50,7 +53,7 @@ if (isMain) {
   try {
     const res = await fetch(GRAPHQL_URL, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
+      headers: trackerBootHeaders(apiKey),
       body: JSON.stringify({ query: buildStoryQuery(storyIds) }),
     })
     if (res.ok) {
