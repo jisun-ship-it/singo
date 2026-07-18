@@ -1,3 +1,4 @@
+import { trackerBootHeaders } from './promote-target.mjs'
 import { realpathSync, existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
@@ -13,7 +14,7 @@ export function parseStatus(json) {
   return typeof story.status === 'string' ? story.status : null
 }
 
-const GRAPHQL_URL = process.env.TRACKER_BOOT_GRAPHQL_URL || 'https://trackerboot.com/analytics/graphql'
+const GRAPHQL_URL = process.env.TRACKER_BOOT_GRAPHQL_URL || 'https://trackerboot.com/api/graphql'
 function readEnvKey(envFile, key) {
   if (!envFile || !existsSync(envFile)) return ''
   const line = readFileSync(envFile, 'utf8').split('\n').find((l) => l.startsWith(`${key}=`))
@@ -25,7 +26,7 @@ async function fetchStatus(storyId, apiKey) {
   try {
     const res = await fetch(GRAPHQL_URL, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
+      headers: trackerBootHeaders(apiKey),
       body: JSON.stringify({ query: buildStatusQuery(storyId) }),
       signal: controller.signal,
     })

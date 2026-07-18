@@ -48,6 +48,8 @@ Claude가 PR diff를 읽고 코드 리뷰를 수행한다. Claude는 verdict(통
 - **지적** → Claude가 지적 본문을 `.review-body.md`에 작성하고, PM이 **`decline-jay.command`(또는 `decline-mush.command`)를 더블클릭**한다.
 - **통과** → PM이 **`approve-jay.command`(또는 `approve-mush.command`)를 더블클릭**해 승인한다.
 
+> ⚠️ **승인은 formal GitHub review가 아니라 PR 코멘트(`✅ PM-APPROVED`) 마킹이다.** PR 작성자(봇 명의 토큰)와 승인 계정(PM의 GitHub 계정)이 실제로는 동일 계정이라 GitHub의 "자기 PR은 approve 불가" 제약에 걸리기 때문. `merge-*.command`는 PR의 마지막 코멘트가 `✅ PM-APPROVED`인지로 게이트를 확인한다. (별도 봇 GitHub 계정을 새로 만들면 formal review로 되돌릴 수 있음.)
+
 ---
 
 ### 5단계 — Merge

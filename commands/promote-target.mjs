@@ -18,6 +18,9 @@ export function storyFromSubject(subject) { const m = (subject || '').match(/#(\
 export function buildStoryQuery(ids) {
   return `query { ${ids.map((id, i) => `s${i}: story(storyId: "${id}") { id status } `).join(' ')} }`
 }
+export function trackerBootHeaders(apiKey) {
+  return { 'content-type': 'application/json', 'authorization': `Bearer ${apiKey}` }
+}
 export function acceptedFromResponse(json) {
   const data = json?.data
   if (!data || typeof data !== 'object') return new Set()
@@ -28,7 +31,7 @@ function readEnvKey(envFile, key) {
   const line = readFileSync(envFile, 'utf8').split('\n').find((l) => l.startsWith(`${key}=`))
   return line ? line.slice(key.length + 1).trim() : ''
 }
-const GRAPHQL_URL = process.env.TRACKER_BOOT_GRAPHQL_URL || 'https://trackerboot.com/analytics/graphql'
+const GRAPHQL_URL = process.env.TRACKER_BOOT_GRAPHQL_URL || 'https://trackerboot.com/api/graphql'
 const isMain = process.argv[1] && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1])
 console.error('[promote-target] isMain 판정:', isMain, '| module url:', fileURLToPath(import.meta.url), '| argv[1]:', process.argv[1])
 if (isMain) {
@@ -50,7 +53,7 @@ if (isMain) {
   try {
     const res = await fetch(GRAPHQL_URL, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
+      headers: trackerBootHeaders(apiKey),
       body: JSON.stringify({ query: buildStoryQuery(storyIds) }),
     })
     if (res.ok) {

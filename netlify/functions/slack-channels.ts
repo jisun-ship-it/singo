@@ -1,31 +1,19 @@
 import type { Handler } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
+import { getConnection } from './db'
+import { kickUserFromChannel } from './slack-api'
 
 interface SlackChannel {
   id: string
   name: string
+  is_private: boolean
+  num_members: number
 }
 
 interface SlackChannelsResponse {
   ok: boolean
   channels?: SlackChannel[]
   error?: string
-}
-
-async function getConnection(
-  supabase: ReturnType<typeof createClient>,
-): Promise<{ access_token: string; team_id: string } | null> {
-  const { data, error } = await supabase
-    .from('slack_connections')
-    .select('access_token, team_id')
-    .limit(1)
-    .single()
-  if (error) {
-    if (error.code !== 'PGRST116') console.error('getConnection DB error:', error)
-    return null
-  }
-  if (!data) return null
-  return data as { access_token: string; team_id: string }
 }
 
 async function listSlackChannels(botToken: string): Promise<SlackChannel[]> {
@@ -40,16 +28,34 @@ async function listSlackChannels(botToken: string): Promise<SlackChannel[]> {
   return data.channels ?? []
 }
 
-async function getSubscribedChannelIds(
+async function getMirrorChannelIds(
   supabase: ReturnType<typeof createClient>,
   teamId: string,
-): Promise<string[]> {
+): Promise<Set<string>> {
   const { data, error } = await supabase
-    .from('channel_subscriptions')
+    .from('mirror_channels')
     .select('channel_id')
     .eq('team_id', teamId)
+  if (error) console.error('getMirrorChannelIds DB error:', error)
+  return new Set(
+    (data ?? []).map((r: { channel_id: string }) => r.channel_id),
+  )
+}
+
+async function getSubscriptionData(
+  supabase: ReturnType<typeof createClient>,
+  teamId: string,
+): Promise<Map<string, { subscribed: boolean; target_language: string | null }>> {
+  const { data, error } = await supabase
+    .from('channel_subscriptions')
+    .select('channel_id,subscribed,target_language')
+    .eq('team_id', teamId)
   if (error) console.error('getSubscribedChannelIds DB error:', error)
-  return ((data ?? []) as { channel_id: string }[]).map((row) => row.channel_id)
+  const map = new Map<string, { subscribed: boolean; target_language: string | null }>()
+  for (const row of (data ?? []) as { channel_id: string; subscribed: boolean; target_language: string | null }[]) {
+    map.set(row.channel_id, { subscribed: row.subscribed === true, target_language: row.target_language ?? null })
+  }
+  return map
 }
 
 export const handler: Handler = async (event) => {
@@ -78,25 +84,37 @@ export const handler: Handler = async (event) => {
         body: JSON.stringify({ error: (err as Error).message }),
       }
     }
-    const subscribedIds = await getSubscribedChannelIds(supabase, connection.team_id)
+    const subscriptionMap = await getSubscriptionData(supabase, connection.team_id)
+    const mirrorChannelIds = await getMirrorChannelIds(supabase, connection.team_id)
 
-    const result = channels.map((ch) => ({
-      id: ch.id,
-      name: ch.name,
-      subscribed: subscribedIds.includes(ch.id),
-    }))
+    const result = channels.map((ch) => {
+      const sub = subscriptionMap.get(ch.id)
+      return {
+        id: ch.id,
+        name: ch.name,
+        is_private: ch.is_private,
+        num_members: ch.num_members,
+        subscribed: sub?.subscribed === true,
+        target_language: sub?.target_language ?? null,
+        is_mirror: mirrorChannelIds.has(ch.id) || ch.name.startsWith('mirror-'),
+      }
+    })
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(result),
+      body: JSON.stringify({
+        workspace: { name: connection.team_name, teamId: connection.team_id },
+        channels: result,
+      }),
     }
   }
 
   if (event.httpMethod === 'POST') {
-    const { channelId, subscribed } = JSON.parse(event.body ?? '{}') as {
+    const { channelId, subscribed, targetLanguage } = JSON.parse(event.body ?? '{}') as {
       channelId: string
-      subscribed: boolean
+      subscribed?: boolean
+      targetLanguage?: string
     }
 
     const connection = await getConnection(supabase)
@@ -104,9 +122,43 @@ export const handler: Handler = async (event) => {
       return { statusCode: 401, body: JSON.stringify({ error: 'No workspace connected' }) }
     }
 
+    if (subscribed === true) {
+      const joinResponse = await fetch('https://slack.com/api/conversations.join', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${connection.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ channel: channelId }),
+      })
+      const joinData = (await joinResponse.json()) as { ok: boolean; error?: string }
+      if (!joinData.ok && joinData.error !== 'already_in_channel') {
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: `conversations.join failed: ${joinData.error ?? 'unknown'}` }),
+        }
+      }
+    }
+
+    if (subscribed === false && connection.authed_user_id) {
+      const { data: mirrorData } = await supabase
+        .from('mirror_channels')
+        .select('channel_id')
+        .eq('team_id', connection.team_id)
+        .eq('source_channel_id', channelId)
+      const mirrorChannelId = (mirrorData as Array<{ channel_id: string }> | null)?.[0]?.channel_id
+      if (mirrorChannelId) {
+        await kickUserFromChannel(connection.access_token, mirrorChannelId, connection.authed_user_id)
+      }
+    }
+
+    const updateData: Record<string, unknown> = { team_id: connection.team_id, channel_id: channelId }
+    if (subscribed !== undefined) updateData.subscribed = subscribed
+    if (targetLanguage !== undefined) updateData.target_language = targetLanguage
+
     await supabase
       .from('channel_subscriptions')
-      .upsert({ team_id: connection.team_id, channel_id: channelId, subscribed }, { onConflict: 'team_id,channel_id' })
+      .upsert(updateData, { onConflict: 'team_id,channel_id' })
 
     return { statusCode: 200, body: '' }
   }
