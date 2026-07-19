@@ -340,6 +340,75 @@ describe('slack-channels handler — POST', () => {
     expect(result?.statusCode).toBe(200)
   })
 
+  it('calls conversations.invite to add user to mirror channel on subscribe', async () => {
+    const { mockUpsert } = makeSupabaseMock({
+      connection: { data: { access_token: 'xoxb-test', team_id: 'T123', team_name: 'Test Team', authed_user_id: 'U_YUJIN' }, error: null },
+      mirrorChannels: { data: [{ channel_id: 'C_MIRROR' }], error: null },
+    })
+
+    const result = await handler(makeEvent('POST', { channelId: 'C001', subscribed: true }), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      'https://slack.com/api/conversations.invite',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ channel: 'C_MIRROR', users: 'U_YUJIN' }),
+      }),
+    )
+    expect(mockUpsert).toHaveBeenCalledWith(
+      { team_id: 'T123', channel_id: 'C001', subscribed: true },
+      { onConflict: 'team_id,channel_id' },
+    )
+  })
+
+  it('skips conversations.invite when no mirror channel exists on subscribe', async () => {
+    const { mockUpsert } = makeSupabaseMock({
+      connection: { data: { access_token: 'xoxb-test', team_id: 'T123', team_name: 'Test Team', authed_user_id: 'U_YUJIN' }, error: null },
+      mirrorChannels: { data: [], error: null },
+    })
+
+    const result = await handler(makeEvent('POST', { channelId: 'C001', subscribed: true }), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(vi.mocked(fetch)).not.toHaveBeenCalledWith(
+      'https://slack.com/api/conversations.invite',
+      expect.anything(),
+    )
+    expect(mockUpsert).toHaveBeenCalled()
+  })
+
+  it('skips conversations.invite when authed_user_id is null on subscribe', async () => {
+    const { mockUpsert } = makeSupabaseMock({
+      connection: { data: { access_token: 'xoxb-test', team_id: 'T123', team_name: 'Test Team', authed_user_id: null }, error: null },
+      mirrorChannels: { data: [{ channel_id: 'C_MIRROR' }], error: null },
+    })
+
+    const result = await handler(makeEvent('POST', { channelId: 'C001', subscribed: true }), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+    expect(vi.mocked(fetch)).not.toHaveBeenCalledWith(
+      'https://slack.com/api/conversations.invite',
+      expect.anything(),
+    )
+    expect(mockUpsert).toHaveBeenCalled()
+  })
+
+  it('treats already_in_channel from conversations.invite as success on subscribe', async () => {
+    makeSupabaseMock({
+      connection: { data: { access_token: 'xoxb-test', team_id: 'T123', team_name: 'Test Team', authed_user_id: 'U_YUJIN' }, error: null },
+      mirrorChannels: { data: [{ channel_id: 'C_MIRROR' }], error: null },
+    })
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: false, error: 'already_in_channel' }),
+    } as Response)
+
+    const result = await handler(makeEvent('POST', { channelId: 'C001', subscribed: true }), {} as never, vi.fn())
+
+    expect(result?.statusCode).toBe(200)
+  })
+
   it('saves target_language when provided', async () => {
     const { mockUpsert } = makeSupabaseMock()
 

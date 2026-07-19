@@ -1,7 +1,7 @@
 import type { Handler } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import { getConnection } from './db'
-import { kickUserFromChannel } from './slack-api'
+import { inviteUserToChannel, kickUserFromChannel } from './slack-api'
 
 interface SlackChannel {
   id: string
@@ -136,6 +136,18 @@ export const handler: Handler = async (event) => {
         return {
           statusCode: 500,
           body: JSON.stringify({ error: `conversations.join failed: ${joinData.error ?? 'unknown'}` }),
+        }
+      }
+
+      if (connection.authed_user_id) {
+        const { data: mirrorData } = await supabase
+          .from('mirror_channels')
+          .select('channel_id')
+          .eq('team_id', connection.team_id)
+          .eq('source_channel_id', channelId)
+        const mirrorChannelId = (mirrorData as Array<{ channel_id: string }> | null)?.[0]?.channel_id
+        if (mirrorChannelId) {
+          await inviteUserToChannel(connection.access_token, mirrorChannelId, connection.authed_user_id)
         }
       }
     }
